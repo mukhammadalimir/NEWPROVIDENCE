@@ -1,0 +1,1060 @@
+*{
+    list-style: none;
+    text-decoration: none;
+}
+
+.header__logo-col, .header__text-col{
+    padding: 16px 0;
+}
+
+.header__nav-link{
+    font-size: 16px;
+    color: #26272d;
+    margin-right: 41px;
+    font-weight: 500;
+}
+
+.nav-item{
+    padding: 12px 0;
+}
+
+.header__logo h4{
+    font-size: 25px;
+    color: #26272d;
+    font-weight: 400;
+    text-transform: uppercase;
+}
+.header__logo span{
+    font-weight: 700;
+    color: #26272d;
+}
+
+.header__text a{
+    font-size: 16px;
+    color: #26272d;
+} 
+
+.header__text a:hover{
+    color: #267df4;
+    text-decoration: none;
+}
+
+
+.header__text .apple{
+    font-size: 16px;
+    color: #ffffff;
+    padding: 9px 16px;
+    background: #267df4;
+    border-radius: 50px;
+    transition: 0.5s;
+}
+.header__text .apple:hover{
+    color: #ffffff;
+    box-shadow: 0px 0px 5px 2px #5c5c5c;
+}
+
+header{
+    background: url(../img/header.jpg) no-repeat center center / cover;
+    height: 100vh;
+}
+
+.header__text14{
+    margin-top: 135px;
+}
+
+.header__text14 h1{
+    font-size: 62px;
+    color: #26272d;
+}
+
+.header__text14 p{
+    font-size: 20px;
+    color: #8c8f94;
+}
+
+.header__text14 a{
+    font-size: 16px;
+    color: #26272d;
+    border: solid 2px #8c8f94;
+    padding: 19px 41px;
+    border-radius: 50px;
+    transition: 0.5s;
+}
+.header__text14 a:hover{
+    color: #ffffff;
+    background: #267df4;
+    text-decoration: none;
+}
+.header__text14 ul{
+    padding: 0px;
+    margin-top: 30px;
+}
+/* ---------------------- header end -------------------------- */
+/* ************************************************************ */
+/* ---------------------- section__text start ----------------------- */
+
+.con{
+    border-bottom: solid 1px #f4f4f4;
+    padding: 122px 0;
+}
+
+.section__text .fal{
+    color: #267df4;
+    font-size: 40px;
+}
+
+.section__text h3{
+    color: #26272d;
+    font-size: 26px;
+    font-weight: 100;
+    margin-top: 44px;
+}
+
+.section__text p{
+    color: #8c8f94;
+    font-size: 18px;
+    font-weight: 500;
+    margin-top: 38px;
+}
+/* ----------------------- section__text end ------------------------ */
+/* *****************************************-************************ */
+/* ---------------------- section__tel start ------------------------ */
+.section__tel img{
+    width: 100%;
+}
+
+.section__tel-text ul{
+    padding: 0;
+    margin-top: 77px;
+}
+
+.section__tel{
+    padding: 126px 0;
+}
+
+.section__tel-text h2{
+    font-size: 42px;
+    color: #26272d;
+    font-weight: 600;
+}
+
+.section__tel-text p{
+    font-size: 20px;
+    color: #8c8f94;
+    font-weight: 500;
+    margin-top: 37px;
+}
+
+.section__tel-text .sass{
+    font-size: 16px;
+    color: #000000;
+    margin-top: 37px;
+    border: solid 1px #8c8f94;
+    padding: 14px 25px;
+    border-radius: 50px;
+    transition: 0.5s;
+}
+
+.section__tel-text .sass:hover{
+    color: #ffffff;
+    background: #267df4;
+    text-decoration: none;
+}
+
+.section__tel-text .absaa{
+    font-size: 16px;
+    color: #000000;
+    border: solid 1px #8c8f94;
+    padding: 14px 25px;
+    border-radius: 50px;
+    margin-left: 15px;
+    transition: 0.5s;
+}
+
+.section__tel-text .absaa:hover{
+    color: #ffffff;
+    background: #267df4;
+    text-decoration: none;
+}
+
+.section__tel-text span{
+    margin-left: 48px;
+}
+
+
+
+/* ----------------------- section__tel end ------------------------ */
+/* *****************************************-************************ */
+/* ---------------------- section__maps start ----------------------- */
+
+.section__maps-text ul{
+    padding: 0;
+}
+.section__maps-text h1{
+    font-size: 42px;
+    color: #26272d;
+    font-weight: 500;
+}
+
+.section__maps-text p{
+    font-size: 20px;
+    color: #8c8f94;
+    font-weight: 500;
+    margin-top: 40px;
+}
+
+.section__maps-text h5{
+    font-size: 12px;
+    color: #26272d;
+    font-weight: 500;
+    margin-top: 58px;
+}
+
+.section__maps-text h5{
+    font-size: 12px;
+    color: #26272d;
+    font-weight: 500;
+    margin-top: 58px;
+}
+
+.section__maps-text .ulsa{
+    margin-top: 31px;
+}
+
+.section__maps-text .drop{
+    font-size: 40px;
+    color: #267df4;
+    font-weight: 500;
+}
+
+.section__maps-text .ever{
+    font-size: 40px;
+    color: #807f83;
+    font-weight: 500;
+    margin-left: 20px;
+}
+
+.section__maps-text .ever span{
+    color: #7ac143;
+    font-size: 25px;
+    font-weight: 700;
+}
+
+.section__maps-text .drop span{
+    color: #267df4;
+    font-weight: 700;
+    font-size: 25px;
+}
+
+.section__maps .zemla img{
+    width: 100%;
+}
+/* ***************************************************** */
+
+.iphone h3{
+    font-size: 32px;
+    color: #26272d;
+    font-weight: 500;
+}
+.iphone p{
+    font-size: 12px;
+    color: #8c8f94;
+    font-weight: 500;
+}
+.iphone h4{
+    border: solid 1px #267df4;
+    width: 50px;
+    margin: auto;
+    margin-top: 25px;
+    margin-bottom: 25px;
+}
+
+.section__text-iphone input{
+    border: none;
+    color: #3a3d4b;
+    font-size: 16px;
+    width: 53%;
+}
+
+.section__text-iphone input:hover{
+    border: none;
+    text-decoration: none;
+}
+
+.section__text-iphone button{
+    border: none;
+    background: #7ac143;
+    color: #ffffff;
+    padding: 13px 30px;
+    border-radius: 50px;
+}
+
+.section__text-iphone form{
+    border: solid 1px #807f83;
+    border-radius: 50px;
+    padding: 4px 5px;
+}
+
+
+.section__text-iphone .app{ 
+    font-size: 12px;
+    color: #ffffff;
+    text-align: center;
+    line-height: 0px;
+}
+
+.section__text-iphone .app:hover{ 
+    text-decoration: none;
+}
+.section__text-iphone ul:hover{ 
+    text-decoration: none;
+    background: #267df4;
+    color: #3a3d4b;
+}
+.section__text-iphone .app span{ 
+    font-size: 23px;
+}
+.section__text-iphone ul{ 
+    background: #000000;
+    padding: 12px 50px;
+    border-radius: 50px;
+    transition: 0.5s;
+}
+
+.section__text-iphone ul .fab{ 
+    color: #ffffff;
+    font-size: 26px;
+    margin-right: 19px;
+}
+
+.section__text-iphone p{
+    font-size: 12px;
+    color: #3a3d4b;
+    text-transform: uppercase;
+}
+
+iframe{
+    padding: 50px 0;
+}
+
+.img__corusel img{
+    border-radius: 50%;
+    margin-left: 30px;
+}
+
+.img__corusel h5{
+    font-size: 32px;
+    color: #26272d;
+    margin: 75px 0 48px;
+}
+
+.img__corusel p{
+    font-size: 20px;
+    color: #8c8f94;
+    margin-bottom: 32px;
+}
+
+.img__corusel a{
+    font-size: 20px;
+    color: #f2bc3b;
+}
+
+.img__corusel h4{
+    font-size: 12px;
+    color: #26272d;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-top: 30px;
+}
+
+.section__corusel{
+    padding: 50px 0;
+    background: #f5f5f8;
+}
+
+.carousel-indicators{
+    bottom: -55px;
+}
+
+.carousel-indicators li{
+    background-color: #000;
+}
+
+.row-section{
+    margin: 0;
+}
+
+
+/* ********************************************** */
+.section__black input{
+    border: solid 0px;
+    margin-left: 5px;
+    width: 70%;
+}
+.section__black form{
+    border: solid 2px #807f83;
+    border-radius: 50px;
+    padding: 5px 5px 5px 10px;
+    margin: 51px 0 27px;
+}
+
+.section__black button{
+    padding: 13px 32px;
+    border: solid 0px ;
+    background: #7ac143;
+    border-radius: 50px;
+    color: #fff;
+}
+
+.section__black h3{
+    font-size: 42px;
+    color: #26272d;
+    font-weight: 500;
+}
+.section__black p{
+    font-size: 14px;
+    color: #8c8f94;
+    font-weight: 500;
+}
+
+.contablock{
+    border-bottom: solid 1px #f4f4f4;
+    padding: 50px 0;
+}
+
+/* ************************* footer start ***************************** */
+
+footer .app{ 
+    font-size: 12px;
+    color: #ffffff;
+    text-align: center;
+    line-height: 0px;
+}
+
+footer .app:hover{ 
+    text-decoration: none;
+}
+footer ul:hover{ 
+    text-decoration: none;
+    background: #267df4;
+    color: #3a3d4b;
+}
+footer .app span{ 
+    font-size: 23px;
+}
+footer ul{ 
+    background: #000000;
+    padding: 5px 14px;
+    border-radius: 10px;
+    transition: 0.5s;
+    margin-left: 10px;
+}
+
+footer ul .fab{ 
+    color: #ffffff;
+    font-size: 26px;
+    margin-right: 19px;
+}
+
+footer p{
+    font-size: 14px;
+    color: #8c8f94;
+    font-weight: 500;
+    padding: 35px 0;
+}
+footer h5{
+    font-size: 14px;
+    color: #26272d;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+footer span{
+    font-weight: 700;
+}
+
+footer .footerako a{
+    color: #bdbec0;
+    font-size: 17px;
+    margin-left: 28px;
+    transition: 0.5s;
+    margin-top: 30px;
+}
+
+footer .footerako a:hover{
+    color: #7ac143;
+}
+
+.foooter__col{
+    padding: 0;
+}
+
+.footer__end h3{
+    color: #26272d;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+.footer__end p{
+    color: #8c8f94;
+    font-size: 16px;
+    padding: 0;
+    line-height: 35px;
+}
+.footercon{
+    border-bottom: solid 1px #f4f4f4;
+    padding: 86px 0 130px;
+}
+
+.footer-ali h1{
+    font-size: 20px;
+    color: #26272d;
+}
+.footer-ali h2{
+    font-size: 16px;
+    color:#8c8f94;
+}
+.footer-ali {
+    padding: 20px 0;
+}
+
+.footer-ali h5{
+    font-size: 30px;
+    text-transform: uppercase;
+    color: #000000;
+}
+
+.sectioncol{
+    padding: 0;
+}
+
+
+/* ********************************************** */
+/* --------------- media start ------------------ */
+
+@media(max-width: 1199px){
+    .section__text-iphone ul {
+        padding: 7px 14px;
+    }
+    
+    .section__tel {
+        padding: 70px 0;
+    }
+    
+    .section__black h3 {
+        font-size: 35px;
+    }
+}
+
+@media(max-width: 991px){
+    .header__text14 h1 {
+        font-size: 40px;
+    }
+    .header__text14 p {
+        font-size: 16px;
+    }
+    
+    .header__text14 a {
+        padding: 8px 18px;
+    }
+    .header__text14 ul {
+        margin-top: 20px;
+    }
+    .header__text14 {
+        margin-top: 70px;
+    }
+    
+    .header__logo h4 {
+        font-size: 17px;
+    }
+    
+    .section__tel-text h2 {
+        font-size: 35px;
+    }
+    
+    .section__tel-text p {
+        font-size: 16px;
+    }
+    .section__tel-text .sass {
+        font-size: 15px;
+        padding: 9px 12px;
+    }
+    
+    .section__tel-text .absaa {
+        font-size: 15px;
+        padding: 9px 12px;
+    }
+    
+    .section__maps-text h1 {
+        font-size: 35px;
+    }
+    .section__maps-text p {
+        font-size: 16px;
+    }
+    
+    .section__maps-text .drop {
+        font-size: 20px;
+    }
+    
+    .section__maps-text .ever {
+        font-size: 20px;
+    }
+    
+    .iphone h3 {
+        font-size: 30px;
+    }
+    
+    .section__text-iphone button {
+        padding: 7px 17px;
+    }
+    
+    .section__text-iphone input {
+        font-size: 16px;
+        width: 57%;
+    }
+    
+    footer .footerako a {
+        font-size: 15px;
+        margin-left: 10px;
+        margin-top: 20px;
+    }
+    
+    .section__maps-text p {
+        margin-top: 10px;
+    }
+    
+    .section__maps-text h5 {
+        margin-top: 15px;
+    }
+    
+    .section__maps-text .ulsa {
+        margin-top: 10px;
+    }
+    
+    .zemla{
+        padding: 20px 0;
+    }
+    
+    .ytp-cued-thumbnail-overlay-image{
+        height: 300px;
+    }
+    
+    .img__corusel h5 {
+        font-size: 25px;
+        margin: 30px 0 25px;
+    }
+    
+    .img__corusel p {
+        font-size: 16px;
+        margin-bottom: 20px;
+    }
+    
+    .img__corusel h4 {
+        margin-top: 12px;
+    }
+    
+    .section__black h3 {
+        font-size: 25px;
+    }
+    
+    .section__black form {
+        margin: 34px 0 13px;
+    }
+    
+    .section__black button {
+        padding: 8px 20px;
+    }
+    
+    .contablock {
+        padding: 17px 0;
+    }
+    
+    .footercon {
+        padding: 50px 0 40px;
+    }
+    
+    footer ul .fab {
+        font-size: 20px;
+        margin-right: 13px;
+    }
+    
+    footer .app span {
+        font-size: 17px;
+    }
+    
+    footer .app {
+        font-size: 10px;
+    }
+    
+}
+
+@media(max-width: 767px){
+    .header__text14 h1 {
+        font-size: 35px;
+    }
+    
+    .header__text14 p {
+        font-size: 12px;
+    }
+    
+    .header__text14 a {
+        padding: 5px 8px;
+        font-size: 15px;
+    }
+    
+    .section__text h3 {
+        font-size: 19px;
+        margin-top: 20px;
+    }
+    
+    .section__text .fal {
+        font-size: 25px;
+    }
+    
+    .section__text p {
+        font-size: 11px;
+        margin-top: 14px;
+    }
+    
+    .con {
+        padding: 15px 0;
+    }
+    
+    .section__tel-text h2 {
+        font-size: 25px;
+    }
+    
+    .section__tel-text p {
+        font-size: 11px;
+        margin-top: 0px;
+    }
+    
+    .section__tel-text .sass {
+        font-size: 13px;
+        padding: 4px 9px;
+    }
+    
+    .section__tel-text .absaa {
+        font-size: 13px;
+        padding: 4px 9px;
+    }
+    
+    .section__tel-text ul {
+        margin-top: 20px;
+    }
+    
+    .section__maps-text h1 {
+        font-size: 25px;
+    }
+    
+    .section__maps-text p {
+        margin-top: 0px;
+    }
+    
+    .section__maps-text p {
+        font-size: 13px;
+    }
+    
+    .section__maps-text h5 {
+        margin-top: 0px;
+    }
+    
+    .section__maps-text h5 {
+        font-size: 11px;
+    }
+    
+    .section__maps-text .drop span {
+        font-size: 15px;
+    }
+    
+    .section__maps-text .ever span {
+        font-size: 15px;
+    }
+    
+    .section__text-iphone .app span {
+        font-size: 20px;
+    }
+    
+    .section__text-iphone .app {
+        font-size: 11px;
+    }
+    
+    .section__text-iphone ul .fab {
+        font-size: 23px;
+        margin-right: 11px;
+    }
+    
+    .footer__end p {
+        font-size: 13px;
+        line-height: 22px;
+    }
+    
+    footer p {
+        font-size: 13px;
+        padding: 10px 0;
+    }
+    
+    footer ul .fab {
+        font-size: 17px;
+        margin-right: 8px;
+    }
+    
+    footer .app span {
+        font-size: 16px;
+    }
+    
+    footer ul {
+        padding: 3px 7px;
+    }
+    
+    .footer-ali h5 {
+        font-size: 25px;
+    }
+    
+    .footer-ali h2 {
+        font-size: 13px;
+    }
+    
+    .footer-ali h1 {
+        font-size: 17px;
+    }
+    
+    .header__text .apple {
+        padding: 2px 8px;
+    }
+}
+
+@media(max-width: 575px){
+    .img__corusel p {
+        font-size: 11px;
+        margin-bottom: 10px;
+        width: 271px;
+        margin-left: 138px;
+    }
+    .img__corusel a {
+        font-size: 14px;
+    }
+    
+    .img__corusel h4 {
+        font-size: 11px;
+    }
+    
+    .section__corusel {
+        padding: 33px 0;
+    }
+    
+    .carousel-indicators {
+        bottom: -35px;
+    }
+    
+    .section__black h3 {
+        font-size: 17px;
+    }
+    
+    .section__black button {
+        padding: 5px 8px;
+        font-size: 12px;
+    }
+    
+    footer {
+        padding: 0px 55px;
+    }
+    
+    .footer-ali {
+        padding: 6px 39px;
+    }
+    
+    footer .app span {
+        font-size: 14px;
+    }
+    
+    footer ul .fab {
+        font-size: 15px;
+        margin-right: 5px;
+    }
+    
+    .header__text a {
+        font-size: 11px;
+    }
+    
+    .header__logo h4 {
+        display: none;
+    }
+    
+    .header__text ul{
+        padding: 0;
+    }
+    
+    .header__text .apple {
+        font-size: 11px;
+    }
+    
+    .section__tel-text .sass {
+        font-size: 11px;
+        padding: 2px 5px;
+    }
+    
+    .section__tel-text .absaa {
+        font-size: 11px;
+        padding: 3px 4px;
+    }
+    
+    .section__tel-text .absaa {
+        margin-left: 4px;
+    }
+    
+    .section__tel-text h2 {
+        font-size: 17px;
+    }
+    .section__maps-text h1 {
+        font-size: 17px;
+    }
+    
+    .iphone h3 {
+        font-size: 17px;
+    }
+    
+    .section__text-iphone button {
+        padding: 7px 17px;
+        font-size: 11px;
+    }
+    
+    .section__text-iphone input {
+        font-size: 13px;
+        width: 60%;
+    }
+    
+    .section__text-iphone .app {
+        font-size: 9px;
+    }
+    
+    .section__text-iphone .app span {
+        font-size: 16px;
+    }
+    
+    .section__text-iphone ul .fab {
+        font-size: 20px;
+    }
+    
+    .img__corusel h5 {
+        font-size: 17px;
+        margin: 20px 0 15px;
+    }
+    
+    .header__text14 h1 {
+        font-size: 25px;
+    }
+    .header__text14 p {
+        font-size: 11px;
+    }
+    
+    .header__text14 a {
+        padding: 5px 8px;
+        font-size: 11px;
+    }
+    
+    .header__text14 {
+        margin-top: 100px;
+        padding: 0px 30px;
+    }
+    
+    .section__tel {
+        padding: 40px 10px;
+    }
+    
+    .section__tel-text span {
+        margin-left: 10px;
+    }
+    
+    .ccc {
+        display: none;
+    }
+    
+    .foooter__col {
+        padding: 19px;
+    }
+    
+}
+
+@media(max-width: 552px){
+    .img__corusel p {
+        display: none;
+    }
+    
+    footer {
+        padding: 0px 27px;
+    }
+    
+    footer .footerako a {
+        font-size: 11px;
+        margin-left: 5px;
+        margin-top: 0px;
+    }
+    
+    .footer-ali h5 {
+        font-size: 17px;
+    }
+    
+    .footer-ali h2 {
+        font-size: 11px;
+    }
+    
+    .footer-ali h1 {
+        font-size: 14px;
+    }
+    
+    .section__tel {
+        padding: 18px 0px;
+    }
+    
+    .section__text h3 {
+        font-size: 14px;
+        margin-top: 9px;
+    }
+    
+    footer .footer__end{
+        display: none;
+    }
+    
+    
+}
+
+
+@media(max-width: 420px){
+    .footercon {
+        padding: 20px 0 10px;
+    }
+    
+    .img__corusel img {
+        width: 30%;
+    }
+    
+}
+
+@media(max-width: 320px){
+    .section__black input {
+        font-size: 11px;
+        width: 57%;
+    }
+    
+    .section__black form {
+        padding: 8px 2px 8px 3px;
+    }
+    
+    .section__black p {
+        font-size: 11px;
+    }
+    footer p {
+        font-size: 11px;
+    }
+    
+    footer h5 {
+        font-size: 12px;
+    }
+    
+    
+}
+
+@media(max-width: 316px){
+    .section__text-iphone ul {
+        display: none;
+    }
+}
