@@ -971,11 +971,6 @@ footer .footerako a:hover{
     .ccc {
         display: none;
     }
-    
-    .foooter__col {
-        padding: 19px;
-    }
-    
 }
 
 @media(max-width: 552px){
