@@ -1019,11 +1019,15 @@ footer .footerako a:hover{
 
 @media(max-width: 420px){
     .footercon {
-        padding: 20px 0 10px;
+        padding: 0;
     }
     
     .img__corusel img {
         width: 30%;
+    }
+    
+    .footer .footercon .row{
+    justify-content-center
     }
     
 }
