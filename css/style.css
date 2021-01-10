@@ -691,6 +691,10 @@ footer .footerako a:hover{
         font-size: 35px;
     }
     
+    footer {
+        padding: 0px 55px;
+    }
+    
     .header__text14 p {
         font-size: 12px;
     }
@@ -829,6 +833,10 @@ footer .footerako a:hover{
         width: 271px;
         margin-left: 138px;
     }
+    
+    .footercon {
+    padding: 50px 30px;
+    }
     .img__corusel a {
         font-size: 14px;
     }
@@ -853,11 +861,7 @@ footer .footerako a:hover{
         padding: 5px 8px;
         font-size: 12px;
     }
-    
-    footer {
-        padding: 0px 55px;
-    }
-    
+
     .footer-ali {
         padding: 6px 39px;
     }
