@@ -8,106 +8,123 @@
 <style>
   :root {
     --bg: var(--tg-theme-bg-color, #ffffff);
-    --text: var(--tg-theme-text-color, #1c1c1e);
-    --hint: var(--tg-theme-hint-color, #8e8e93);
-    --accent: var(--tg-theme-button-color, #c0392b);
-    --accent-text: var(--tg-theme-button-text-color, #ffffff);
-    --card: var(--tg-theme-secondary-bg-color, #f2f2f7);
+    --text: var(--tg-theme-text-color, #111111);
+    --hint: var(--tg-theme-hint-color, #9a9a9a);
+    --line: color-mix(in srgb, var(--text) 10%, transparent);
+    --accent: #c8102e;
   }
-  * { box-sizing: border-box; }
+  @media (prefers-color-scheme: dark) {
+    :root:not(.tg) { --bg: #111111; --text: #f2f2f2; --hint: #7a7a7a; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); }
   body {
-    margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text);
-    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; padding: 14vh 24px 32px;
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-  h1 { margin: 8px 0 4px; font-size: 28px; text-align: center; }
-  h1 span { color: var(--accent); }
-  .sub { text-align: center; color: var(--hint); margin: 0 0 24px; font-size: 14px; }
-  form { display: flex; gap: 8px; }
+  main { max-width: 480px; margin: 0 auto; }
+
+  .logo { font-size: 15px; font-weight: 600; letter-spacing: .02em; margin-bottom: 40px; }
+  .logo span { color: var(--accent); }
+
+  form { position: relative; border-bottom: 1px solid var(--line); transition: border-color .2s; }
+  form:focus-within { border-color: var(--text); }
   input {
-    flex: 1; min-width: 0; padding: 12px 14px; font-size: 18px; border-radius: 12px;
-    border: 1px solid transparent; background: var(--card); color: var(--text); outline: none;
+    width: 100%; padding: 8px 32px 12px 0; border: 0; outline: none; background: none;
+    color: var(--text); font: inherit; font-size: 26px; font-weight: 300;
   }
-  input:focus { border-color: var(--accent); }
-  button {
-    padding: 0 18px; border: 0; border-radius: 12px; font-size: 16px; font-weight: 600;
-    background: var(--accent); color: var(--accent-text); cursor: pointer;
+  input::placeholder { color: var(--hint); opacity: .6; }
+  input::-webkit-search-cancel-button { display: none; }
+  .go {
+    position: absolute; right: 0; bottom: 12px; border: 0; background: none;
+    color: var(--hint); font-size: 22px; line-height: 1; cursor: pointer;
   }
-  h2 { font-size: 13px; text-transform: uppercase; color: var(--hint); margin: 28px 0 8px; font-weight: 600; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip {
-    padding: 6px 12px; border-radius: 16px; background: var(--card); color: var(--text);
-    font-size: 15px; border: 0; cursor: pointer;
+  form:focus-within .go { color: var(--text); }
+
+  section { margin-top: 48px; }
+  .label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12px; color: var(--hint); letter-spacing: .08em; text-transform: uppercase;
+    margin-bottom: 8px;
   }
-  .clear { background: none; color: var(--hint); font-size: 13px; padding: 0; margin-top: 10px; }
-  #historyBlock[hidden] { display: none; }
+  .label button { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+  ul { list-style: none; }
+  li button {
+    width: 100%; padding: 12px 0; border: 0; border-bottom: 1px solid var(--line);
+    background: none; color: var(--text); font: inherit; font-size: 17px;
+    text-align: left; cursor: pointer; display: flex; justify-content: space-between;
+  }
+  li button::after { content: "→"; color: var(--hint); }
+  li:last-child button { border-bottom: 0; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-  <h1><span>大</span>БКРС</h1>
-  <p class="sub">Большой китайско-русский словарь · bkrs.info</p>
+<main>
+  <div class="logo"><span>大</span>БКРС</div>
 
   <form id="form" autocomplete="off">
-    <input id="q" type="search" placeholder="你好 / привет / nihao" enterkeyhint="search" autofocus>
-    <button type="submit">Найти</button>
+    <input id="q" type="search" placeholder="Слово" enterkeyhint="search" aria-label="Слово">
+    <button class="go" type="submit" aria-label="Найти">→</button>
   </form>
 
-  <div id="historyBlock" hidden>
-    <h2>Недавние</h2>
-    <div class="chips" id="history"></div>
-    <button class="clear" id="clear" type="button">Очистить историю</button>
-  </div>
+  <section id="recent" hidden>
+    <div class="label">Недавние <button id="clear" type="button">Очистить</button></div>
+    <ul id="history"></ul>
+  </section>
 
-  <h2>Примеры</h2>
-  <div class="chips" id="examples"></div>
+  <section id="examplesBlock">
+    <div class="label">Например</div>
+    <ul id="examples"></ul>
+  </section>
+</main>
 
 <script>
   const BKRS = "https://bkrs.info/slovo.php?ch=";
   const KEY = "bkrs_history";
   const tg = window.Telegram && window.Telegram.WebApp;
-  if (tg) { tg.ready(); tg.expand(); }
+  if (tg && tg.initData) {
+    document.documentElement.classList.add("tg");
+    tg.ready(); tg.expand();
+    try { tg.setHeaderColor("bg_color"); } catch (e) {}
+  }
 
-  function loadHistory() {
-    try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
-  }
-  function saveHistory(list) {
-    try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {}
-  }
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } };
+  const save = list => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} };
 
   // Открывает страницу bkrs.info внутри Mini App — показывается всё, что есть на сайте.
   function go(query) {
     query = (query || "").trim();
     if (!query) return;
-    const list = [query, ...loadHistory().filter(x => x !== query)].slice(0, 20);
-    saveHistory(list);
-    window.location.href = BKRS + encodeURIComponent(query);
+    save([query, ...load().filter(x => x !== query)].slice(0, 8));
+    location.href = BKRS + encodeURIComponent(query);
   }
 
-  function chip(text) {
+  function item(text) {
+    const li = document.createElement("li");
     const b = document.createElement("button");
-    b.className = "chip"; b.type = "button"; b.textContent = text;
-    b.onclick = () => go(text);
-    return b;
+    b.type = "button"; b.textContent = text; b.onclick = () => go(text);
+    li.appendChild(b);
+    return li;
   }
 
   function render() {
-    const list = loadHistory();
-    const box = document.getElementById("history");
-    box.replaceChildren(...list.map(chip));
-    document.getElementById("historyBlock").hidden = list.length === 0;
+    const list = load();
+    document.getElementById("history").replaceChildren(...list.map(item));
+    document.getElementById("recent").hidden = !list.length;
+    document.getElementById("examplesBlock").hidden = list.length > 0;
   }
 
-  ["你好", "学习", "朋友", "спасибо", "zhongguo"].forEach(w =>
-    document.getElementById("examples").appendChild(chip(w)));
-
+  document.getElementById("examples").append(...["你好", "学习", "спасибо"].map(item));
   document.getElementById("form").addEventListener("submit", e => {
     e.preventDefault();
     go(document.getElementById("q").value);
   });
-  document.getElementById("clear").onclick = () => { saveHistory([]); render(); };
+  document.getElementById("clear").onclick = () => { save([]); render(); };
 
   // Бот может открыть приложение сразу с запросом: ...?q=слово
-  const q = new URLSearchParams(location.search).get("q")
-    || (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param);
+  const q = new URLSearchParams(location.search).get("q");
   if (q) go(q); else render();
 </script>
 </body>

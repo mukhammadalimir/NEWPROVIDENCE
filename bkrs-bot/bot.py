@@ -14,11 +14,13 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ChatType
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
+    BotCommand,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InlineQuery,
     InlineQueryResultArticle,
     InputTextMessageContent,
+    LinkPreviewOptions,
     MenuButtonWebApp,
     Message,
     WebAppInfo,
@@ -51,26 +53,23 @@ def app_url(query: str | None = None) -> str:
 
 
 def result_keyboard(query: str, private: bool = True) -> InlineKeyboardMarkup:
-    rows = []
+    row = []
     # Кнопки web_app разрешены Telegram только в личных чатах.
     if private:
-        rows.append([InlineKeyboardButton(
-            text=f"🔎 «{query[:40]}» в БКРС", web_app=WebAppInfo(url=bkrs_url(query)))])
-    rows.append([InlineKeyboardButton(text="🌐 Открыть в браузере", url=bkrs_url(query))])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+        row.append(InlineKeyboardButton(text="Открыть", web_app=WebAppInfo(url=bkrs_url(query))))
+    row.append(InlineKeyboardButton(text="Браузер ↗", url=bkrs_url(query)))
+    return InlineKeyboardMarkup(inline_keyboard=[row])
 
 
 @dp.message(CommandStart())
 async def start(message: Message) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="📖 Открыть БКРС", web_app=WebAppInfo(url=app_url()))
+        InlineKeyboardButton(text="Открыть словарь", web_app=WebAppInfo(url=app_url()))
     ]])
     await message.answer(
-        "大БКРС — большой китайско-русский словарь.\n\n"
-        "Отправьте слово на китайском, русском или пиньинем — "
-        "я открою результат с сайта bkrs.info прямо в Telegram.\n\n"
-        "Также можно нажать кнопку «БКРС» внизу слева или использовать меня "
-        "в любом чате: <code>@имя_бота слово</code>.",
+        "<b>大БКРС</b>\n"
+        "Китайско-русский словарь\n\n"
+        "Отправьте слово — <i>你好</i>, <i>привет</i> или <i>nihao</i>.",
         reply_markup=kb,
     )
 
@@ -87,7 +86,7 @@ async def search(message: Message) -> None:
         return
     private = message.chat.type == ChatType.PRIVATE
     await message.answer(
-        f"Поиск в БКРС: <b>{escape(query)}</b>",
+        f"<b>{escape(query)}</b>",
         reply_markup=result_keyboard(query, private),
     )
 
@@ -100,10 +99,11 @@ async def inline(query: InlineQuery) -> None:
         return
     result = InlineQueryResultArticle(
         id="bkrs",
-        title=f"БКРС: {text}",
-        description="Открыть перевод на bkrs.info",
+        title=text,
+        description="Перевод в БКРС",
         input_message_content=InputTextMessageContent(
-            message_text=f"Поиск в БКРС: <b>{escape(text)}</b>\n{bkrs_url(text)}"),
+            message_text=f"<b>{escape(text)}</b>",
+            link_preview_options=LinkPreviewOptions(is_disabled=True)),
         reply_markup=result_keyboard(text, private=False),
     )
     await query.answer([result], cache_time=60)
@@ -127,6 +127,10 @@ async def main() -> None:
     # Кнопка-меню «БКРС» слева от поля ввода открывает Mini App.
     await bot.set_chat_menu_button(
         menu_button=MenuButtonWebApp(text="БКРС", web_app=WebAppInfo(url=app_url())))
+    await bot.set_my_commands([BotCommand(command="start", description="Словарь")])
+    await bot.set_my_short_description("Китайско-русский словарь БКРС")
+    await bot.set_my_description(
+        "大БКРС — китайско-русский словарь.\nОтправьте слово, и перевод откроется прямо в Telegram.")
     await dp.start_polling(bot)
 
 
