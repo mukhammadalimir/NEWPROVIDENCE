@@ -1,0 +1,6 @@
+.env
+node_modules/
+miniapp/dist/
+__pycache__/
+.pytest_cache/
+*.pyc
