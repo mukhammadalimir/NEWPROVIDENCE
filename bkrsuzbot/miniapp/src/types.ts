@@ -12,6 +12,7 @@ export interface Me {
   services: { translate: boolean; tts: boolean; ai: boolean; collocations: boolean };
   voices: string[];
   bot_username: string;
+  offline?: boolean;
 }
 
 export interface Sense { pos: string | null; items: string[]; kind: Kind; verified: boolean }

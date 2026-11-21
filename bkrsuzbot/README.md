@@ -258,6 +258,32 @@ docker compose restart bot
 - Логи: `docker compose logs -f bot api`.
 - Если хостинг не пускает к `api.telegram.org`, задайте `PROXY_URL`.
 
+### Mini App без сервера (GitHub Pages)
+
+Пока сервера нет, Mini App работает в **автономном режиме** — папка `webapp/` в репозитории,
+публикуется через GitHub Pages:
+`https://mukhammadalimir.github.io/NEWPROVIDENCE/bkrsuzbot/webapp/` → это значение `WEBAPP_URL` для бота.
+
+- Словарь (CC-CEDICT + редакционные карточки) загружается в телефон один раз (~4 МБ сжато)
+  и ищется прямо в браузере: иероглифы, пиньинь, узбекский/русский по словарю редакции,
+  разные чтения, словосочетания, примеры, разбор фраз по словам.
+- Избранное, история, повторение и настройки хранятся в **Telegram CloudStorage**
+  (отдельно для каждого пользователя, синхронизируются между устройствами).
+- Озвучка — китайский голос телефона (Web Speech API); если его нет, кнопки скрыты.
+- Нет: машинного перевода фраз, AI, админки и «Сообщить об ошибке» (эти функции — в боте
+  и в серверной версии). Интерфейс прямо пишет об этом.
+
+Обновление после правок словаря или кода:
+
+```bash
+cd bkrsuzbot/miniapp && npm run build:offline
+cd ../backend && python -m app.scripts.export_offline --out ../webapp/data
+git add ../webapp && git commit -m "Update offline Mini App" && git push
+```
+
+Проверка: `python3 -m http.server 8090` из корня репозитория, затем
+`node bkrsuzbot/e2e/offline-smoke.cjs` (25 проверок на экране iPhone/Android).
+
 ---
 
 ## 8. Проверки и как их повторить

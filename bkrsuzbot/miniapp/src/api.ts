@@ -1,11 +1,13 @@
 import { tg } from "./telegram";
 import type { Favorite, Me, SearchResult, Explain } from "./types";
 
-export class ApiError extends Error {
-  constructor(public status: number, public code: string) {
-    super(code);
-  }
-}
+import { ApiError } from "./errors";
+import { offlineApi, speak } from "./offline/backend";
+
+export { ApiError };
+
+/** Автономная сборка (GitHub Pages, без сервера): VITE_OFFLINE=1 */
+export const OFFLINE = import.meta.env.VITE_OFFLINE === "1";
 
 function headers(): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -34,7 +36,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return r.json() as Promise<T>;
 }
 
-export const api = {
+const onlineApi = {
   me: () => request<Me>("GET", "/api/me"),
   settings: (s: Partial<Pick<Me, "ui_lang" | "target_lang" | "voice">>) => request("PUT", "/api/me/settings", s),
   deleteMe: () => request("DELETE", "/api/me"),
@@ -65,11 +67,13 @@ export const api = {
   },
 };
 
+export const api = (OFFLINE ? offlineApi : onlineApi) as typeof onlineApi;
+
 /** Аудио загружается с авторизацией и проигрывается из blob. */
 const audioCache = new Map<string, string>();
 let current: HTMLAudioElement | null = null;
 
-export async function playAudio(text: string, slow: boolean, voice?: string): Promise<void> {
+async function fetchAudio(text: string, slow: boolean, voice?: string): Promise<void> {
   const key = `${voice ?? ""}|${slow}|${text}`;
   let url = audioCache.get(key);
   if (!url) {
@@ -97,3 +101,5 @@ export async function playAudio(text: string, slow: boolean, voice?: string): Pr
   current = new Audio(url);
   await current.play();
 }
+
+export const playAudio = OFFLINE ? speak : fetchAudio;

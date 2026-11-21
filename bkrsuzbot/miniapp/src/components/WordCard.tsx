@@ -50,9 +50,9 @@ export function WordCard({ card, lang, query }: { card: Card; lang: string; quer
         <button className="chip-btn" onClick={() => shareText(cardPlainText(card, lang), me.bot_username)}>
           <Icon name="share" size={16} /> {t("share")}
         </button>
-        <button className="chip-btn subtle" onClick={() => setReport(true)}>
+        {!me.offline && <button className="chip-btn subtle" onClick={() => setReport(true)}>
           <Icon name="flag" size={16} /> {t("report")}
-        </button>
+        </button>}
       </footer>
       {report && <ReportSheet query={query} entryId={card.readings[0]?.entry_id} onClose={() => setReport(false)} />}
     </article>

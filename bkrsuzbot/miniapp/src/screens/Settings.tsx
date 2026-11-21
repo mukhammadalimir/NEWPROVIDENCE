@@ -38,10 +38,11 @@ export function SettingsScreen() {
         <label>{t("services")}</label>
         <ul className="svc">
           {(["translate", "tts", "ai"] as const).map((k) => (
-            <li key={k}><span>{k === "translate" ? "Google Translate" : k === "tts" ? "Text-to-Speech" : "AI"}</span>
+            <li key={k}><span>{k === "translate" ? "Google Translate" : k === "tts" ? (me.offline ? t("deviceVoice") : "Text-to-Speech") : "AI"}</span>
               <b className={me.services[k] ? "ok" : "off"}>{me.services[k] ? t("on") : t("off")}</b></li>
           ))}
         </ul>
+        {me.offline && <p className="hint">{t("offlineNote")}</p>}
       </div>
 
       <div className="card settings">

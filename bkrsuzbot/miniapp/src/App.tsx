@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError } from "./api";
+import { api, ApiError, OFFLINE } from "./api";
+import { offlineApi } from "./offline/backend";
 import { Icon } from "./components/Icon";
 import { State } from "./components/ui";
 import { Ctx } from "./ctx";
@@ -32,7 +33,11 @@ export function App() {
     api.me().then(setMe).catch((e) => setFatal(e instanceof ApiError && e.status === 401 ? "auth" : "network"));
   }, []);
 
-  useEffect(() => { initTelegram(); load(); }, [load]);
+  useEffect(() => {
+    initTelegram();
+    load();
+    if (OFFLINE) offlineApi.preload().catch(() => {}); // словарь загружается заранее
+  }, [load]);
   useEffect(() => { document.documentElement.lang = uiLang; }, [uiLang]);
 
   const toast = useCallback((msg: string) => {

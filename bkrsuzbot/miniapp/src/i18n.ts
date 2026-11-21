@@ -93,6 +93,10 @@ const uz = {
   sourcesText:
     "Xitoycha so‘zlar va o‘qilishlar: CC-CEDICT (CC BY-SA 4.0, inglizcha). O‘zbekcha/ruscha ma’nolar: tahririyat kartochkalari. Mashina tarjimasi: Google Translate. Talaffuz: Google Text-to-Speech. AI izohlar alohida belgilanadi.",
   services: "Xizmatlar",
+  offlineNote:
+    "Oflayn rejim: lug‘at telefoningiz ichida ishlaydi, server shart emas. Gaplarni mashina tarjimasi va AI izohlar hozircha faqat botda (server ulanganda) mavjud. Talaffuz — telefoningizdagi xitoycha ovoz.",
+  dictLoading: "Lug‘at yuklanmoqda… Birinchi marta ~4 MB, keyin tez ochiladi.",
+  deviceVoice: "Telefon ovozi",
   on: "ulangan",
   off: "ulanmagan",
 };
@@ -192,6 +196,10 @@ const ru: Dict = {
   sourcesText:
     "Китайские слова и чтения: CC-CEDICT (CC BY-SA 4.0, английский). Узбекские/русские значения: карточки редакции. Машинный перевод: Google Translate. Озвучка: Google Text-to-Speech. AI-пояснения помечаются отдельно.",
   services: "Сервисы",
+  offlineNote:
+    "Автономный режим: словарь работает прямо в телефоне, сервер не нужен. Машинный перевод фраз и AI-пояснения пока доступны только после подключения сервера. Озвучка — китайский голос вашего телефона.",
+  dictLoading: "Загружается словарь… В первый раз ~4 МБ, потом открывается быстро.",
+  deviceVoice: "Голос телефона",
   on: "подключено",
   off: "не подключено",
 };

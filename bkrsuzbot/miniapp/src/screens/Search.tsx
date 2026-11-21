@@ -102,7 +102,7 @@ export function SearchScreen({ pending }: { pending: Pending | null }) {
         <button className="btn wide" disabled={!q.trim() || status === "loading"}>{t("translate")}</button>
       </form>
 
-      {status === "loading" && <Skeleton />}
+      {status === "loading" && <>{me.offline && <p className="hint center">{t("dictLoading")}</p>}<Skeleton /></>}
       {status === "error" && (
         error === "rate_limited" ? <State icon="clock" title={t("rateLimited")} /> :
         <State icon="wifi" title={t("netError")} hint={t("netErrorHint")}
