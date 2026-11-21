@@ -115,10 +115,15 @@ def escape(text: str) -> str:
 
 async def main() -> None:
     from aiogram.client.default import DefaultBotProperties
+    from aiogram.client.session.aiohttp import AiohttpSession
     from aiogram.enums import ParseMode
 
     logging.basicConfig(level=logging.INFO)
-    bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    # Необязательный прокси (если Telegram заблокирован): http://, socks5://
+    proxy = os.getenv("PROXY_URL", "").strip()
+    session = AiohttpSession(proxy=proxy) if proxy else None
+    bot = Bot(BOT_TOKEN, session=session,
+              default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     # Кнопка-меню «БКРС» слева от поля ввода открывает Mini App.
     await bot.set_chat_menu_button(
         menu_button=MenuButtonWebApp(text="БКРС", web_app=WebAppInfo(url=app_url())))
