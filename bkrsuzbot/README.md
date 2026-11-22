@@ -44,9 +44,13 @@ Server, domen va pullik kalitlar kerak emas. Bot Windows kompyuteringizda ishlay
   o'chirib, `.bat` ni qayta oching. Baza ~420 MB joy egallaydi.
 - Zaxira nusxa: `backend\bkrsuz.db` faylini nusxalab qo'ying (sevimlilar, tarix, redaksiya o'zgarishlari).
 - Mini App serversiz rejimda ishlaydi: qidiruv telefonda bo'ladi, sevimlilar Telegram CloudStorage'da saqlanadi.
-  Unda ham bkrs.info ma'nolari bor: telefon faqat ochilgan so'zning bo'lagini yuklaydi. O'zbekcha
-  tarjima Mini App'da faqat bot avval tarjima qilib keshlagan qatorlar uchun chiqadi
-  (`export_offline` qayta ishga tushirilganda qo'shiladi), qolganlari ruscha ko'rsatiladi.
+  Unda ham bkrs.info ma'nolari bor: telefon faqat ochilgan so'zning bo'lagini yuklaydi.
+  Mini App'da serverda tarjima qilib bo'lmaydi (Gemini kalitini ochiq sahifaga qo'yib
+  bo'lmaydi), shuning uchun o'zbekcha **oldindan** tarjima qilinadi: `ozbekcha_tarjima.bat`
+  eng ko'p ishlatiladigan so'zlardan boshlab bkrs qatorlarini tarjima qiladi (jami ~270 ming
+  qator; bepul kalitning kunlik limiti tugasa to'xtaydi — ertaga qayta ishga tushiring) va
+  `webapp\data` ni yangilaydi. Keyin `webapp\` ni GitHub'ga (`main`) yuklash kerak.
+  Hali tarjima qilinmagan qatorlar ruscha, belgisi bilan ko'rsatiladi.
   Matn tarjimasi, AI va admin panel faqat botning o'zida (pastda "Mini App без сервера" bo'limiga qarang).
   Mini App yangilanishi `main` branchga merge qilingandan keyin GitHub Pages'da ko'rinadi.
 
@@ -344,6 +348,13 @@ docker compose restart bot
 
 Обновление после правок словаря или кода:
 
+Узбекский в автономной Mini App — только заранее переведённые строки (ключ Gemini нельзя
+класть в открытую страницу): `python -m app.scripts.pretranslate_bkrs [--words N]` переводит
+строки БКРС, которые попадают в Mini App, начиная с частотных слов, в кэш перевода (его же
+использует бот); затем `export_offline` добавляет их в `data/bkrs/*.json`. Прерывание и
+повторный запуск безопасны; при исчерпании дневного лимита бесплатного ключа скрипт
+останавливается. В Windows всё это делает `ozbekcha_tarjima.bat`.
+
 ```bash
 cd bkrsuzbot/miniapp && npm run build:offline      # работает и в Windows
 cd ../backend && python -m app.scripts.export_offline --out ../webapp/data   # нужна база с import_bkrs
@@ -399,7 +410,7 @@ python -m app.scripts.import_wikt --file ../webapp/data/wikt.json   # для б�
 
 ## 8. Проверки и как их повторить
 
-### Автотесты (61 шт.)
+### Автотесты (92 шт.)
 
 ```bash
 createdb -O bkrsuz bkrsuz_test
@@ -411,6 +422,8 @@ TEST_DATABASE_URL=sqlite+aiosqlite:///test.db python -m pytest -q
 
 Бесплатный режим (edge-tts, Gemini для AI, выбор провайдеров) — `tests/test_free.py`;
 大БКРС (разбор DSL, импорт, ru как в словаре, uz — перевод, выражения только из БКРС) — `tests/test_bkrs.py`.
+Заранее переводимые строки (пакеты, 429/503/404, деление пакета, узбекские апострофы) —
+`tests/test_pretranslate.py`.
 
 Тесты используют настоящую PostgreSQL, миграции Alembic и фрагмент CC-CEDICT
 (`tests/data/cedict_sample.u8`). Ответы Google в тестах подменяются через
