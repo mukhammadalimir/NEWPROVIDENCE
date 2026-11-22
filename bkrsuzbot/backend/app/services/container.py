@@ -1,0 +1,58 @@
+"""Сборка внешних сервисов по переменным окружения.
+
+Если ключ не задан, соответствующий сервис = None, и интерфейс честно сообщает,
+что функция не подключена (кнопки не показываются).
+"""
+
+import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import Settings
+from app.models import FeatureFlag
+from app.services.ai import AIExplainer
+from app.services.ratelimit import RateLimiter
+from app.services.translate import GoogleTranslator
+from app.services.tts import GoogleTTS
+
+# Функции, которыми админ может управлять (вкл/выкл).
+FLAG_DEFAULTS = {"translate": True, "tts": True, "ai": True, "collocations": True}
+
+
+class Services:
+    def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None):
+        self.settings = settings
+        self.http = http or httpx.AsyncClient()
+        self.translator = (GoogleTranslator(settings.translate_key, self.http)
+                           if settings.translate_key else None)
+        self.tts = (GoogleTTS(settings.tts_key, self.http, settings.tts_voices,
+                              settings.audio_cache_dir, settings.tts_slow_rate)
+                    if settings.tts_key else None)
+        self.ai = (AIExplainer(settings.anthropic_api_key, settings.ai_model)
+                   if settings.anthropic_api_key else None)
+        self.search_limiter = RateLimiter(settings.rate_search_per_min, 60)
+        self.tts_limiter = RateLimiter(settings.rate_tts_per_min, 60)
+        self.ai_limiter = RateLimiter(settings.rate_ai_per_hour, 3600)
+
+    async def flags(self, session: AsyncSession) -> dict[str, bool]:
+        result = dict(FLAG_DEFAULTS)
+        for f in (await session.scalars(select(FeatureFlag))).all():
+            if f.key in result:
+                result[f.key] = f.enabled
+        return result
+
+    async def available(self, session: AsyncSession) -> dict[str, bool]:
+        """Функция доступна, только если она и настроена (есть ключ), и включена админом."""
+        flags = await self.flags(session)
+        return {
+            "translate": bool(self.translator) and flags["translate"],
+            "tts": bool(self.tts) and flags["tts"],
+            "ai": bool(self.ai) and flags["ai"],
+            "collocations": flags["collocations"],
+        }
+
+    def configured(self) -> dict[str, bool]:
+        return {"translate": bool(self.translator), "tts": bool(self.tts), "ai": bool(self.ai)}
+
+    async def aclose(self) -> None:
+        await self.http.aclose()

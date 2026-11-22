@@ -24,3 +24,5 @@
    cp .env.example .env   # впишите BOT_TOKEN и WEBAPP_URL
    python bot.py
    ```
+
+> Этот простой бот заменён полноценным проектом в папке [`bkrsuzbot/`](../bkrsuzbot/README.md).
