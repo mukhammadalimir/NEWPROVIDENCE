@@ -129,7 +129,7 @@ class GeminiTranslator(CachedTranslator):
         }
         try:
             r = await self.http.post(GEMINI_URL.format(model=self.model), json=body,
-                                     headers={"x-goog-api-key": self.api_key}, timeout=40)
+                                     headers={"x-goog-api-key": self.api_key}, timeout=20)
         except httpx.HTTPError as e:
             raise TranslationUnavailable(f"network: {e.__class__.__name__}") from e
         if r.status_code != 200:

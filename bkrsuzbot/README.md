@@ -151,7 +151,7 @@ Mini App ──► api (FastAPI) ───────────────�
 | `BOT_TOKEN` | да | бот и проверка initData | @BotFather |
 | `WEBAPP_URL` | для Mini App | HTTPS-адрес Mini App | ваш домен (см. §7) |
 | `ADMIN_IDS` | для админки | Telegram ID админов | @userinfobot |
-| `GEMINI_API_KEY` | бесплатный машинный перевод | Gemini API (`GEMINI_MODEL`, по умолч. `gemini-2.5-flash`) | https://aistudio.google.com/apikey |
+| `GEMINI_API_KEY` | бесплатный машинный перевод | Gemini API (`GEMINI_MODEL`, по умолч. `gemini-flash-lite-latest`) | https://aistudio.google.com/apikey |
 | `GOOGLE_API_KEY` | для перевода и озвучки | Cloud Translation + Text-to-Speech | Google Cloud Console |
 | `ANTHROPIC_API_KEY` | нет | AI-пояснения и примеры | https://platform.claude.com |
 

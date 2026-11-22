@@ -11,7 +11,7 @@ async def test_gemini_only(session, make_services, google):
     assert r["text"]["translation"] == "[gemini] 他是老师。"
     assert r["text"]["provider"] == "Google Gemini" and "mt_used" in r["notices"]
     req = google.calls[-1]
-    assert req.headers["x-goog-api-key"] == "g-key" and "gemini-2.5-flash" in req.url.path
+    assert req.headers["x-goog-api-key"] == "g-key" and "gemini-flash-lite-latest" in req.url.path
     assert "Uzbek (Latin script)" in req.content.decode()
     n = len(google.calls)
     await search(session, svc, "他是老师。", user_target="uz")

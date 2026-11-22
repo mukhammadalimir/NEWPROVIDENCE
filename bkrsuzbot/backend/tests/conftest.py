@@ -122,7 +122,8 @@ def google():
 def make_services(tmp_path, google):
     def make(**overrides) -> Services:
         settings = Settings(**{"google_api_key": "test-key", "audio_cache_dir": str(tmp_path),
-                               "anthropic_api_key": "", **overrides})
+                               "anthropic_api_key": "", "gemini_api_key": "",
+                               "gemini_model": "gemini-flash-lite-latest", **overrides})
         return Services(settings, http=httpx.AsyncClient(transport=httpx.MockTransport(google.handler)))
     return make
 
