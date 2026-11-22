@@ -105,6 +105,13 @@ def group_by_headword(entries: list[DictEntry]) -> "OrderedDict[str, list[DictEn
 
 
 _WEAK_DEF = re.compile(r"^(old |archaic )?(variant of|surname|used in|see )", re.I)
+_VARIANT_DEF = re.compile(r"^(old |archaic )?variant of", re.I)
+
+
+def _is_variant(e: DictEntry) -> bool:
+    """Строка CC-CEDICT, где все определения — «variant of …» (только вариант написания)."""
+    defs = [d for s in e.senses for d in s.get("en", [])]
+    return bool(defs) and all(_VARIANT_DEF.match(d) for d in defs)
 
 
 def short_gloss(entries: list[DictEntry], lang: str,
@@ -187,7 +194,9 @@ async def build_cards(session: AsyncSession, svc: Services, entries: list[DictEn
     wikt = await wikt_meanings(session, lang, (e.simplified for e in entries))
 
     for headword, group in group_by_headword(entries).items():
-        trad = next((e.traditional for e in group if e.traditional != headword), None)
+        # «昰 是 /variant of 是/» — вариант написания, а не традиционная форма 是
+        trad = next((e.traditional for e in group
+                     if e.traditional != headword and not _is_variant(e)), None)
         readings: OrderedDict[tuple, list[DictEntry]] = OrderedDict()
         # Сначала редакционные карточки, затем обычные слова, затем имена собственные.
         for e in sorted(group, key=lambda e: (e.source != "curated", _reading_key(e)[1], e.id)):
@@ -226,7 +235,10 @@ async def build_cards(session: AsyncSession, svc: Services, entries: list[DictEn
                 for e in curated for c in e.collocations
             ]
             seen = {c["zh"] for c in collocations}
-            for c in pool:
+            # у фамилии (Dū) те же слоги, что у обычного чтения (dū) — словосочетания
+            # показываем только у обычного, без повтора
+            shadowed = proper and (tone_key, False) in readings
+            for c in ([] if shadowed else pool):
                 if len(collocations) >= MAX_COLLOCATIONS:
                     break
                 if c.simplified in seen or not _matches_reading(c, headword, tone_key, all_keys):
@@ -305,7 +317,8 @@ async def attach_bkrs(session: AsyncSession, svc: Services, cards: list[dict],
                       lang: str) -> list[str]:
     """Добавляет к чтениям карточек значения БКРС (reading["bkrs"], reading["bkrs_kind"])."""
     found = await bkrs.find(session, (c["headword"] for c in cards))
-    groups = []
+    groups: list[list[dict]] = []
+    owners: list[dict] = []  # чтение, которому принадлежит группа строк
     for card in cards:
         e = found.get(card["headword"])
         if not e:
@@ -315,9 +328,11 @@ async def attach_bkrs(session: AsyncSession, svc: Services, cards: list[dict],
                                  [r["pinyin"] for r in card["readings"]])
         for r in card["readings"]:
             sel = bkrs.select_items(by.get(r["pinyin"], []))
-            if sel:
+            # без русского (английский/китайский текст БКРС) — пусть будет CC-CEDICT
+            if sel and bkrs.has_russian(sel):
                 r["bkrs"] = sel
                 groups.append(sel)
+                owners.append(r)
         # Порядок чтений — как в БКРС (打: сначала dǎ «бить», потом dá «дюжина»);
         # имена собственные по-прежнему в конце.
         order = [dsl.norm_pinyin(x) for x in bkrs.entry_readings(e, items)]
@@ -326,11 +341,8 @@ async def attach_bkrs(session: AsyncSession, svc: Services, cards: list[dict],
         card["readings"].sort(key=rank)
     if not groups:
         return []
-    kind = await bkrs.translate_items(session, svc, groups, lang)
-    for card in cards:
-        for r in card["readings"]:
-            if r.get("bkrs"):
-                r["bkrs_kind"] = kind
+    for r, kind in zip(owners, await bkrs.translate_items(session, svc, groups, lang)):
+        r["bkrs_kind"] = kind
     return []  # «перевод недоступен» показывается в самой карточке (bkrs_kind = bkrs_ru)
 
 
@@ -368,7 +380,11 @@ def _neutral_collocations_to_main_reading(cards: list[dict]) -> None:
 
 
 def reading_gloss(r: dict) -> str:
-    """Короткое значение чтения для избранного, inline-режима и т.п."""
+    """Короткое значение чтения для избранного, inline-режима и т.п.
+    В узбекском режиме значение редакции (написано человеком) — раньше машинного перевода."""
+    curated = [s for s in r.get("senses") or [] if s.get("kind") == "curated"]
+    if curated and r.get("bkrs_kind") in ("bkrs_mt", "bkrs_part", "bkrs_ru"):
+        return ", ".join(curated[0]["items"])
     if r.get("bkrs"):
         g = bkrs.short(r["bkrs"])
         if g:

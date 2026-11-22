@@ -71,9 +71,8 @@ def article_strings(art: dict) -> list[str]:
             t = line[2] if line[0] == 2 else line[1]
             if t:
                 out.append(t)
-    if art.get("g"):
-        out.append(art["g"])
-    out.extend(v[0] for v in art.get("gp", {}).values())
+    # короткие подписи g/gp берутся из перевода ПОЛНЫХ строк значений (не обрезанных)
+    out.extend(art.get("_full", []))
     return out
 
 
@@ -98,12 +97,19 @@ async def collect_articles(session, rows: list[DictEntry],
         if not e:
             continue
         entry_rd, items = bkrs.parsed(e)
+        if not bkrs.has_russian(items):  # статья БКРС без русского — оставляем CC-CEDICT
+            continue
         by_pinyin = dsl.assign_readings(items, entry_rd, list(keys.values()))
         art: dict = {"r": {}}
+        full: dict[str, str] = {}  # полное первое значение по чтениям (для подписей)
         for key, pinyin in keys.items():
-            sel = bkrs.select_items(by_pinyin.get(pinyin, []))
-            if not sel:
+            # в Mini App ограничения Telegram нет — почти вся статья
+            sel = bkrs.select_items(by_pinyin.get(pinyin, []), bkrs.OFFLINE_MAX_ITEMS,
+                                    bkrs.OFFLINE_MAX_CHARS)
+            if not sel or not bkrs.has_russian(sel):
                 continue
+            if s := bkrs.first_sense(sel):
+                full[pinyin] = s
             lines = []
             for it in sel:
                 if it["kind"] == "ex":
@@ -122,16 +128,19 @@ async def collect_articles(session, rows: list[DictEntry],
         order = [dsl.norm_pinyin(x) for x in bkrs.entry_readings(e, items)]
         art["o"] = sorted(keys, key=lambda k: order.index(dsl.norm_pinyin(keys[k]))
                           if dsl.norm_pinyin(keys[k]) in order else len(order))
-        g = bkrs.short(items)
-        if g:
-            art["g"] = g
-            u = uz(g)
-            if u:
-                art["gu"] = u
-        # короткое значение по чтениям (кандидаты «yú», словосочетания) — как short_for()
-        if len(bkrs.entry_readings(e, items)) > 1:
-            gp = {pinyin: bkrs.short_for(e, pinyin) for pinyin in keys.values()}
-            art["gp"] = {p: [s] + ([u] if (u := uz(s)) else []) for p, s in gp.items() if s}
+        # короткие подписи: из полного значения, обрезанного одинаково для ru и uz
+        # (узбекский — перевод полной строки; отдельно обрезанное модель «дописывала»)
+        first = next((full[keys[k]] for k in art["o"] if keys[k] in full), None)
+        first = first or bkrs.first_sense(items)
+        if first:
+            art["g"] = bkrs.cut_gloss(first)
+            if u := uz(first):
+                art["gu"] = bkrs.cut_gloss(u)
+        # по чтениям карточки (кандидаты «yú», словосочетания) — из тех же строк, что в "r"
+        if len(keys) > 1:
+            art["gp"] = {p: [bkrs.cut_gloss(s)] + ([bkrs.cut_gloss(u)] if (u := uz(s)) else [])
+                         for p, s in full.items()}
+        art["_full"] = list(dict.fromkeys([first, *full.values()] if first else full.values()))
         articles[head] = art
     return articles
 
@@ -140,6 +149,7 @@ async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
     """data/bkrs/N.json: статьи collect_articles() с узбекскими строками из кэша."""
     shards: dict[int, dict] = {}
     for head, art in (await collect_articles(session, rows, await uz_cache(session))).items():
+        art.pop("_full", None)  # служебное (для pretranslate), в Mini App не нужно
         shards.setdefault(shard_of(head), {})[head] = art
 
     folder = out / "bkrs"

@@ -1,7 +1,7 @@
 """大БКРС (bkrs.info): разбор DSL, импорт, значения в карточках (ru — как в словаре,
 uz — перевод тех же строк), выражения, которых нет в CC-CEDICT.
 
-Сеть не используется: перевод ru→uz — FakeGoogle из conftest ("[uz] …")."""
+Сеть не используется: перевод ru→uz — FakeGoogle из conftest (транслитерация)."""
 
 import gzip
 import json
@@ -15,6 +15,7 @@ from app.models import BkrsEntry
 from app.scripts.import_bkrs import parse_dsl, run
 from app.services.search import search
 from app.text import dsl
+from conftest import uz_fake as cyr_to_lat  # noqa: E402
 from test_bot_flow import buttons, harness, msg  # noqa: F401  (harness — фикстура)
 
 # Фрагмент в формате дампа bkrs.info (заголовок, пиньинь с отступом, тело DSL).
@@ -118,9 +119,9 @@ async def test_uz_card_translates_bkrs_lines(session, make_services, google):
     r = await search(session, make_services(), "行", user_target="uz")
     by = {x["pinyin"]: x for x in r["cards"][0]["readings"]}
     assert by["xíng"]["bkrs_kind"] == "bkrs_mt"
-    assert "[uz] 1) идти, ходить" in [i["text"] for i in by["xíng"]["bkrs"]]
+    assert cyr_to_lat("1) идти, ходить") in [i["text"] for i in by["xíng"]["bkrs"]]
     ex = next(i for i in by["háng"]["bkrs"] if i["kind"] == "ex")
-    assert ex["zh"] == "写了两行字" and ex["tr"] == "[uz] написать две строки"
+    assert ex["zh"] == "写了两行字" and ex["tr"] == cyr_to_lat("написать две строки")
     # переводится русский текст БКРС, а не английский CC-CEDICT
     bodies = [json.loads(c.content) for c in google.calls]
     assert any(b["source"] == "ru" and b["target"] == "uz" for b in bodies)
@@ -173,7 +174,7 @@ async def test_uz_keeps_human_curated_meanings_above_bkrs(session, make_services
     text = render.card_text(r["cards"][0], "uz", "uz")
     xing = text.split("🔤 <b>xíng</b>")[1].split("🔤")[0]
     assert "yurmoq, bormoq" in xing  # редакция (человеческий узбекский)
-    assert "<b>大БКРС</b>" in xing and "[uz] 1) идти, ходить" in xing  # и перевод БКРС
+    assert "<b>大БКРС</b>" in xing and cyr_to_lat("1) идти, ходить") in xing  # и перевод БКРС
     ru = render.card_text((await search(session, make_services(), "行",
                                         user_target="ru"))["cards"][0], "ru", "ru")
     assert "yurmoq" not in ru and "идти, ходить" in ru  # ru — только как в БКРС
@@ -259,12 +260,12 @@ async def test_uz_lists_keep_curated_and_replace_english(session, make_services)
     r = rows()
     await apply_short_glosses(session, make_services(google_api_key=""), r, "uz")
     assert [(x["gloss"], x["gloss_kind"]) for x in r] == [
-        ("быть, являться", "bkrs"), ("baliq", "curated"), ("yurmoq", "wikt")]
+        ("быть, являться", "bkrs_ru"), ("baliq", "curated"), ("yurmoq", "wikt")]
     # с переводчиком: перевод БКРС, но значение редакции не трогаем
     r = rows()
     await apply_short_glosses(session, make_services(), r, "uz")
     assert [x["gloss_kind"] for x in r] == ["bkrs_mt", "curated", "bkrs_mt"]
-    assert r[0]["gloss"] == "[uz] быть, являться"
+    assert r[0]["gloss"] == cyr_to_lat("быть, являться")
     # ru — всегда как в БКРС
     r = rows()
     await apply_short_glosses(session, make_services(google_api_key=""), r, "ru")
@@ -360,3 +361,89 @@ async def test_short_gloss_of_the_shown_reading(session):
     assert short_for(e, "xíng").startswith("идти, ходить")
     assert short_for(e, "hèng") == ""  # такого чтения в статье нет — не подменяем
     assert short_for(e).startswith("идти, ходить")
+
+
+# ---- случаи из второй проверки (аудит Mini App и бота) ----
+
+def test_dash_placeholder_is_not_a_meaning():
+    assert dsl.parse_body("[m1]-[/m]") == []
+    assert [i["text"] for i in dsl.parse_body("[m1]рыба[/m][m1]—[/m]")] == ["рыба"]
+
+
+def test_meaning_before_example_in_one_block_is_split():
+    items = dsl.parse_body("[m1]перемирие[*][ex]永久休战 постоянное перемирие[/ex][/*][/m]")
+    assert [(i["kind"], i.get("zh", ""), i["text"]) for i in items] == [
+        ("sense", "", "перемирие"), ("ex", "永久休战", "永久休战 постоянное перемирие")]
+
+
+def test_reading_inside_text_is_not_the_line_reading():
+    items = dsl.parse_body("[m1]1) идти (также [b]hàng[/b])[/m]", ["xíng", "hàng"])
+    assert items[0]["reading"] is None and "hàng" in items[0]["text"]
+
+
+def test_breve_pinyin_equals_caron():
+    assert dsl.norm_pinyin("nŏ") == dsl.norm_pinyin("nǒ")
+    assert dsl.match_reading("nŏ", ["nǒ", "nuó"]) == "nǒ"
+
+
+def test_heading_without_reading_stays_in_reading_section():
+    # 干: «[m1][b]gàn[/b]» → «[m2][b]I[/b] сущ.» → значения gàn (раньше уходили к gān)
+    items = dsl.parse_body("[m1][b]gān[/b][/m][m2]1) сухой[/m][m1][b]gàn[/b][/m]"
+                           "[m2][b]I[/b] [p]сущ.[/p][/m][m3]1) ствол[/m]", ["gān", "gàn"])
+    assert [(i["kind"], i["reading"]) for i in items] == [
+        ("sense", "gān"), ("head", "gàn"), ("sense", "gàn")]
+
+
+def test_toneless_card_reading_matches_toned_bkrs_reading():
+    assert dsl.match_reading("qǐlái", ["qilai"]) == "qilai"
+
+
+def test_articles_without_russian_do_not_hide_english():
+    from app.services.bkrs import has_russian
+    assert not has_russian(dsl.parse_body("[m1]1) to rise; to get up[/m]"))
+    assert has_russian(dsl.parse_body("[m1]1) вставать[/m]"))
+
+
+def test_short_gloss_skips_see_also():
+    from app.services.bkrs import short
+    items = dsl.parse_body("[m1]1) см. 东西[/m][m1]2) вещь, предмет[/m]")
+    assert short(items) == "вещь, предмет"
+
+
+def test_approx_with_digits_does_not_crash():
+    from app.text.pinyin import approx_uz
+    assert approx_uz("Shuang1 11") .endswith("11")  # 双11 — раньше IndexError
+
+
+async def test_partial_translation_marks_reading(session, make_services, google):
+    from app.services.bkrs import translate_items
+    svc = make_services()
+    items = [{"kind": "sense", "text": "1) поддельный тест"}, {"kind": "sense", "text": "2) ещё тест"}]
+    google.fail = True  # сервис не отвечает и в кэше ничего нет
+    assert await translate_items(session, svc, [list(items)], "uz") == ["bkrs_ru"]
+    google.fail = False
+    await svc.translator.translate(session, ["1) поддельный тест"], "ru", "uz")  # одна строка в кэше
+    google.fail = True
+    group = [dict(i) for i in items]
+    assert await translate_items(session, svc, [group], "uz") == ["bkrs_part"]
+    assert group[0]["text"] == cyr_to_lat("1) поддельный тест") and group[1]["text"] == "2) ещё тест"
+
+
+def test_long_card_is_split_into_messages():
+    long = [{"kind": "sense", "level": 1, "reading": None, "text": "значение " * 230}]
+    reading = lambda p: {"pinyin": p, "proper": False, "approx": "", "measure_word": None,  # noqa: E731
+                         "senses": [], "english": [], "english_mt": None, "usage": None,
+                         "examples": [], "collocations": [], "bkrs": long, "bkrs_kind": "bkrs"}
+    card = {"headword": "着", "traditional": None,
+            "readings": [reading("zhe"), reading("zháo"), reading("zhuó")]}
+    msgs = render.card_messages(card, "ru", "ru")
+    assert len(msgs) >= 2 and all(len(m) <= 4096 for m in msgs)
+    joined = "\n".join(msgs)
+    assert all(p in joined for p in ("zhe", "zháo", "zhuó"))  # ни одно чтение не потеряно
+
+
+def test_partly_toned_card_reading_is_preferred():
+    # 起来: CC-CEDICT qǐlai и qilai, БКРС qǐlái — статья к qǐlai (тон первого слога совпал)
+    assert dsl.match_reading("qǐlái", ["qǐlai", "qilai"]) == "qǐlai"
+    assert dsl.match_reading("yīdǎ", ["yīdá"]) is None
+    assert dsl.match_reading("lǜ", ["lu"]) is None

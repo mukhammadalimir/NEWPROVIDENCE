@@ -23,10 +23,15 @@ ROMAN_RE = re.compile(r"^[IVXL]+\.?$")
 PINYIN_RE = re.compile(r"^[a-zA-ZüÜÀ-ɏ̀-ͯ'’\- ]+$")
 NUM_PREFIX_RE = re.compile(r"^(?:\d+\)|[а-я]\))\s*")
 SENSE_NUM_RE = re.compile(r"(?:^|\s)(?:\d+\)|[а-я]\))")
-HAN_RE = re.compile(r"[㐀-鿿豈-﫿]")
+HAN_RE = re.compile(r"[㐀-鿿豈-﫿𠀀-𿿿]")
 # иероглифы, знаки CJK и то, что естественно идёт за ними в примере (?, !, скобки)
-ZH_TAIL = re.compile(r"[　-〿㐀-鿿豈-﫿＀-￯]")
-SEPARATOR_RE = re.compile(r"^-{3,}$")
+ZH_TAIL = re.compile(r"[　-〿㐀-鿿豈-﫿＀-￯𠀀-𿿿]")
+# «-----» и заглушка «-» (статья без значения) — не значения
+SEPARATOR_RE = re.compile(r"^[-—–]+$")
+# всё, что может стоять в начале строки перед чтением: номер, римская цифра, запятые, «*»
+LEAD_RE = re.compile(r"^(?:[\s,;*]|\d+\)|[а-я]\)|[IVXL]+\.?)*$")
+LABELS_RE = re.compile(r"\[p\].*?\[/p\]|\[c(?:\s[^\]]*)?\].*?\[/c\]|\[i\].*?\[/i\]", re.S)
+_BREVE = str.maketrans("ăĕĭŏŭĂĔĬŎŬ", "ǎěǐǒǔǍĚǏǑǓ")
 ROMAN_READING_RE = re.compile(r"^([IVXL]+)\.?(?:\s*,\s*|\s+)(.+?)\s*[,;]?$")
 ROMAN_HEAD_RE = re.compile(r"^[IVXL]+\.?(?:[\s,]|$)")
 
@@ -47,7 +52,7 @@ def _clean(s: str) -> str:
 
 def norm_pinyin(s: str) -> str:
     """Сравнение чтений: нижний регистр, без пробелов/апострофов/дефисов."""
-    s = unicodedata.normalize("NFC", s.lower())
+    s = unicodedata.normalize("NFC", s.lower()).translate(_BREVE)  # ŏ (бревис) = ǒ
     return re.sub(r"[\s'’\-·]", "", s).replace("u:", "ü").replace("v", "ü")
 
 
@@ -131,7 +136,31 @@ def _blocks(body: str) -> list[tuple[int, str]]:
     tail = body[pos:]
     if _clean(tail):
         out.append((1, tail))
-    return [(lv, inner) for lv, inner in out if not SEPARATOR_RE.match(_clean(inner))]
+    # «перемирие[*][ex]永久休战 …[/ex]» — значение и пример в одном блоке: разделяем
+    split: list[tuple[int, str]] = []
+    for lv, inner in out:
+        i = inner.find("[ex]")
+        if i > 0:
+            pre = re.sub(r"\[\*\]\s*$", "", inner[:i])
+            if CYR_RE.search(_clean(pre)) or HAN_RE.search(_clean(pre)):
+                split.append((lv, pre))
+                split.append((lv + 1, inner[len(pre):]))
+                continue
+        split.append((lv, inner))
+    return [(lv, inner) for lv, inner in split
+            if _clean(inner) and not SEPARATOR_RE.match(_clean(inner))]
+
+
+def _leading_b(inner: str) -> list[re.Match]:
+    """[b]…[/b] в начале строки (после номера, римской цифры, помет) — это чтение раздела или
+    значения. [b] дальше в тексте («(также [b]hàng[/b])») — часть текста, не чтение строки."""
+    out = []
+    for m in B_RE.finditer(inner):
+        prefix = _clean(LABELS_RE.sub("", inner[:m.start()]))
+        if not LEAD_RE.match(prefix):
+            break
+        out.append(m)
+    return out
 
 
 def parse_body(body: str, readings: list[str] | None = None) -> list[dict]:
@@ -146,18 +175,22 @@ def parse_body(body: str, readings: list[str] | None = None) -> list[dict]:
     body = body.replace("\\[", _ESC_L).replace("\\]", _ESC_R)
     items: list[dict] = []
     section: str | None = None  # чтение раздела (из заголовка)
+    section_level = 0
     sense: str | None = None  # чтение текущего значения
     sense_level = 0
     for level, inner in _blocks(body):
         is_ex = "[ex]" in inner
-        found = [rd for b in B_RE.findall(inner) for rd in [reading_in_b(b)[1]] if rd]
+        lead = [] if is_ex else _leading_b(inner)
+        found = [rd for m in lead for rd in [reading_in_b(m.group(1))[1]] if rd]
         rd_here = found[0] if found else None
-        if rd_here and not is_ex:
-            marked = {norm_pinyin(r) for r in found}
+        if rd_here:
+            drop = {m.start() for m in lead}
 
             def drop_reading(m: re.Match) -> str:
+                if m.start() not in drop:
+                    return m.group(0)
                 roman, rd = reading_in_b(m.group(1))
-                if not rd or norm_pinyin(rd) not in marked:
+                if not rd:
                     return m.group(0)
                 return f"[b]{roman}[/b]" if roman else ""  # «I wáng» → раздел «I»
 
@@ -188,7 +221,11 @@ def parse_body(body: str, readings: list[str] | None = None) -> list[dict]:
         heading = (not text or is_heading(rest)
                    or (bool(ROMAN_HEAD_RE.match(text)) and not SENSE_NUM_RE.search(text)))
         if heading:
-            section, sense, sense_level = rd_here, None, 0
+            # заголовок без чтения глубже раздела с чтением («[m1][b]gàn[/b]» →
+            # «[m2][b]I[/b] сущ.») остаётся в этом разделе
+            if rd_here or level <= section_level or not section:
+                section, section_level = rd_here, level
+            sense, sense_level = None, 0
             if text:
                 items.append({"level": level, "kind": "head", "reading": rd_here, "text": text})
             continue
@@ -212,6 +249,28 @@ def _with_reading(text: str, reading: str) -> str:
     return f"{m.group(0)}{reading} {text[m.end():]}" if m else f"{reading} {text}"
 
 
+_TONE_MARKS = {"̄": 1, "́": 2, "̌": 3, "̀": 4}
+
+
+def _tone_slots(s: str) -> list[tuple[str, int | None]]:
+    """«qǐlái» → [(q,None),(i,3),(l,None),(a,2),(i,None)]: буква и её тон (ü — отдельная буква)."""
+    out: list[tuple[str, int | None]] = []
+    for ch in unicodedata.normalize("NFD", norm_pinyin(s)):
+        if ch in _TONE_MARKS and out:
+            out[-1] = (out[-1][0], _TONE_MARKS[ch])
+        elif ch == "̈" and out:
+            out[-1] = (out[-1][0] + ch, out[-1][1])
+        elif unicodedata.category(ch) != "Mn":
+            out.append((ch, None))
+    return out
+
+
+def _tones_compatible(card: str, bkrs: str) -> bool:
+    a, b = _tone_slots(card), _tone_slots(bkrs)
+    return (len(a) == len(b) and all(x[0] == y[0] for x, y in zip(a, b))
+            and all(x[1] is None or x[1] == y[1] for x, y in zip(a, b)))
+
+
 def match_reading(r: str | None, card_readings: list[str]) -> str | None:
     """Чтение БКРС → чтение карточки. При совпадении без учёта регистра предпочитаем
     точное написание, затем обычное чтение, а не фамилию («wáng», а не «Wáng»)."""
@@ -223,8 +282,15 @@ def match_reading(r: str | None, card_readings: list[str]) -> str | None:
         exact = [c for c in same if unicodedata.normalize("NFC", c) == unicodedata.normalize("NFC", r)]
         common = [c for c in same if c[:1] == c[:1].lower()]
         return (exact or common or same)[0]
-    if strip_tones(r) != n:  # у чтения есть тоны и оно другое (yīdǎ ≠ yīdá)
-        return None
+    if strip_tones(r) != n:  # у чтения БКРС есть тоны, а точного совпадения нет
+        # подходит чтение карточки, где каждый слог либо нейтральный, либо с тем же тоном
+        # (起来 qǐlai ↔ БКРС qǐlái); yīdá ≠ yīdǎ — тон другой. Из подходящих — самое точное.
+        ok = [c for c in card_readings if _tones_compatible(c, r)]
+        if not ok:
+            return None
+        best = max(sum(1 for _, t in _tone_slots(c) if t) for c in ok)
+        top = [c for c in ok if sum(1 for _, t in _tone_slots(c) if t) == best]
+        return top[0] if len(top) == 1 else None
     bare = [c for c in card_readings if strip_tones(c) == strip_tones(r)]
     common = [c for c in bare if c[:1] == c[:1].lower()]
     if len(bare) == 1:

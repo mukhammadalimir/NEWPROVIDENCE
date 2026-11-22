@@ -95,7 +95,7 @@ function bkrsGloss(a: BkrsArticle | undefined, lang: string, current: Kind, piny
   if (lang === "ru") return [ru, "bkrs"];
   if (lang !== "uz" || current === "curated") return null;
   if (uz) return [uz, "bkrs_mt"];
-  return current === "cedict_en" ? [ru, "bkrs"] : null;
+  return current === "cedict_en" ? [ru, "bkrs_ru"] : null;  // русский БКРС вместо английского
 }
 
 const push =<K,>(m: Map<K, Entry[]>, k: K, e: Entry) => {
@@ -181,6 +181,11 @@ function wiktMeanings(head: string, lang: string): string[] {
 }
 
 const WEAK = /^(old |archaic )?(variant of|surname|used in|see )/i;
+const VARIANT = /^(old |archaic )?variant of/i;
+const isVariant = (e: Entry) => {
+  const defs = e.senses.flatMap((s) => s.en ?? []);
+  return defs.length > 0 && defs.every((d) => VARIANT.test(d));
+};
 
 function shortGloss(list: Entry[], lang: string): [string, Kind | ""] {
   for (const e of list) if (e.source === "curated") for (const s of e.senses) {
@@ -232,11 +237,16 @@ async function attachBkrs(cards: Card[], lang: string) {
       }
       const lines = art?.r[`${r.key}|${r.proper}`];
       if (!lines?.length) continue;
-      const uzReady = lang === "uz" && lines.every((l) => (l[0] === 2 ? !l[2] || Boolean(l[3]) : Boolean(l[2])));
+      // по строке: есть перевод — узбекский, нет — русский (как translate_items в боте)
+      const uz = lang === "uz";
+      const uzOf = (l: BkrsLine) => (l[0] === 2 ? l[3] : l[2]);
+      const srcOf = (l: BkrsLine) => (l[0] === 2 ? l[2] : l[1]);
       r.bkrs = lines.map((l): BkrsItem => l[0] === 2
-        ? { level: 2, kind: "ex", reading: null, text: `${l[1]} ${l[2]}`, zh: l[1], tr: (uzReady && l[3]) || l[2] }
-        : { level: 1, kind: l[0] === 0 ? "head" : "sense", reading: null, text: (uzReady && l[2]) || l[1] });
-      r.bkrs_kind = lang !== "uz" ? "bkrs" : uzReady ? "bkrs_mt" : "bkrs_ru";
+        ? { level: 2, kind: "ex", reading: null, text: `${l[1]} ${l[2]}`, zh: l[1], tr: (uz && l[3]) || l[2] }
+        : { level: 1, kind: l[0] === 0 ? "head" : "sense", reading: null, text: (uz && l[2]) || l[1] });
+      const total = lines.filter((l) => srcOf(l)).length;
+      const done = lines.filter((l) => srcOf(l) && uzOf(l)).length;
+      r.bkrs_kind = !uz || !total ? "bkrs" : done === total ? "bkrs_mt" : done ? "bkrs_part" : "bkrs_ru";
     }
     if (art?.o?.length) {
       const rank = (r: Reading) => {
@@ -281,7 +291,8 @@ function collocationPool(head: string): Entry[] {
 function buildCards(list: Entry[], lang: string): Card[] {
   const cards: Card[] = [];
   for (const [head, items] of group(list)) {
-    const trad = items.find((e) => e.trad !== head)?.trad ?? null;
+    // «昰 是 /variant of 是/» — вариант написания, а не традиционная форма 是
+    const trad = items.find((e) => e.trad !== head && !isVariant(e))?.trad ?? null;
     const readings = new Map<string, Entry[]>();
     [...items].sort((a, b) => Number(a.source !== "curated") - Number(b.source !== "curated") || Number(isProper(a)) - Number(isProper(b)) || a.id - b.id)
       .forEach((e) => push(readings, `${e.toneKey}|${isProper(e)}`, e));
@@ -297,7 +308,9 @@ function buildCards(list: Entry[], lang: string): Card[] {
       const main = curated[0] ?? rs[0];
       const coll = curated.flatMap((e) => e.coll.map((c) => ({ zh: c.zh, pinyin: c.pinyin ?? "", gloss: (c as Record<string, string>)[lang] ?? "", gloss_kind: "curated" as Kind })));
       const seen = new Set(coll.map((c) => c.zh));
-      for (const c of pool) {
+      // у фамилии (Dū) те же слоги, что у обычного чтения (dū) — словосочетания только у обычного
+      const shadowed = k.endsWith("|true") && readings.has(`${toneKey}|false`);
+      for (const c of shadowed ? [] : pool) {
         if (coll.length >= 6) break;
         if (seen.has(c.simp) || !matchesReading(c, head, toneKey, allKeys)) continue;
         seen.add(c.simp);

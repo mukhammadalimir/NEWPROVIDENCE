@@ -5,7 +5,8 @@ from html import escape as e
 from app.bot.i18n import t
 
 MAX_LEN = 3900  # лимит Telegram — 4096 символов
-GLOSS_MARKS = {"mt": " 🤖", "cedict_en": " 📖", "wikt": " 🌐", "bkrs": " 📚", "bkrs_mt": " 📚🤖"}
+GLOSS_MARKS = {"mt": " 🤖", "cedict_en": " 📖", "wikt": " 🌐", "bkrs": " 📚", "bkrs_mt": " 📚🤖",
+               "bkrs_ru": " 📚🇷🇺"}  # bkrs_ru — русский БКРС в узбекском режиме (перевода ещё нет)
 
 
 def bkrs_lines(items: list[dict]) -> list[str]:
@@ -29,6 +30,21 @@ def meaning_lang(result: dict) -> str:
     """На каком языке показываются значения: для uz/ru-ввода — на нём же."""
     src = result.get("source_lang")
     return src if src in ("uz", "ru") else result.get("target_lang", "uz")
+
+
+def card_messages(card: dict, ui: str, lang: str) -> list[str]:
+    """Карточка для чата: если не помещается в одно сообщение — несколько сообщений по
+    чтениям (раньше длинная карточка обрезалась, и целые чтения пропадали: 着 zhe)."""
+    head = card_text({**card, "readings": []}, ui, lang)
+    msgs, cur = [], head
+    for r in card["readings"]:
+        block = card_text({**card, "readings": [r]}, ui, lang)[len(head):]
+        if cur != head and len(cur) + len(block) > MAX_LEN:
+            msgs.append(cur)
+            cur = head
+        cur += block
+    msgs.append(_trim(cur))
+    return msgs
 
 
 def card_text(card: dict, ui: str, lang: str) -> str:

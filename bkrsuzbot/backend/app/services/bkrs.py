@@ -1,10 +1,15 @@
 """Значения из 大БКРС (bkrs.info) — человеческого китайско-русского словаря.
 
 - Русский: значения показываются как в БКРС (тот же порядок, пометы, примеры).
-- Узбекский: те же строки БКРС переводятся ru→uz (Gemini / Google), перевод кэшируется;
-  если перевод недоступен — показывается русский оригинал с пометкой.
+- Узбекский: те же строки БКРС переводятся ru→uz (Gemini / Google), перевод кэшируется
+  и проверяется (translate.uz_problem); строки без перевода показываются по-русски.
 
-Источник в выдаче: kind "bkrs" (оригинал) или "bkrs_mt" (машинный перевод БКРС).
+Вид источника строк карточки (reading["bkrs_kind"]):
+  bkrs      — русский оригинал (выбран русский);
+  bkrs_mt   — всё переведено на узбекский;
+  bkrs_part — часть строк переведена, остальные по-русски;
+  bkrs_ru   — перевода нет, показан русский.
+В списках (gloss_kind): bkrs (ru), bkrs_mt (uz), bkrs_ru (русский в узбекском режиме).
 """
 
 import re
@@ -19,11 +24,16 @@ from app.services.translate import TranslationUnavailable
 from app.text import dsl
 from app.text import pinyin as py
 
-MAX_ITEMS = 40  # строк статьи на одно чтение
+MAX_ITEMS = 40  # строк статьи на одно чтение (бот)
 MAX_EX_PER_SENSE = 2  # примеров к одному значению
-MAX_CHARS = 1800  # символов БКРС на одно чтение (лимит сообщения Telegram — 4096)
+MAX_CHARS = 1800  # символов БКРС на одно чтение в боте (лимит сообщения Telegram — 4096)
+# автономная Mini App: ограничения Telegram нет — показываем почти всю статью
+OFFLINE_MAX_ITEMS = 160
+OFFLINE_MAX_CHARS = 7000
 MAX_LOOKUP_LEN = 40
 _NUM_RE = re.compile(r"^\s*(?:[IVXL]+\s+)?(?:\d+\)|[а-яa-z]\))\s*")
+_REF_RE = re.compile(r"^(?:см\.|вм\.|qarang|o‘rniga)\s", re.I)
+CYR_RE = re.compile(r"[А-Яа-яЁё]")
 
 
 REF_ONLY_RE = re.compile(r"\[m1\](?:\[p\])?см\.(?:\[/p\])?\s*\[ref\]([^\[]+)\[/ref\]\s*\[/m\]")
@@ -54,8 +64,15 @@ async def find(session: AsyncSession, headwords: Iterable[str]) -> dict[str, Bkr
     return out
 
 
-def select_items(items: list[dict]) -> list[dict]:
-    """Что показать в карточке: значения по порядку БКРС, к каждому — до 2 примеров."""
+def has_russian(items: list[dict]) -> bool:
+    """В БКРС есть статьи без русского (английский или китайский текст) — они не лучше
+    английского CC-CEDICT, поэтому такие статьи не показываем вместо него."""
+    return any(CYR_RE.search(it["tr"] if it["kind"] == "ex" else it["text"]) for it in items)
+
+
+def select_items(items: list[dict], max_items: int = MAX_ITEMS,
+                 max_chars: int = MAX_CHARS) -> list[dict]:
+    """Что показать: значения по порядку БКРС, к каждому — до 2 примеров."""
     out, chars, ex_run = [], 0, 0
     for it in items:
         if it["kind"] == "ex":
@@ -65,7 +82,7 @@ def select_items(items: list[dict]) -> list[dict]:
         else:
             ex_run = 0
         size = len(it["text"])
-        if out and (len(out) >= MAX_ITEMS or chars + size > MAX_CHARS):
+        if out and (len(out) >= max_items or chars + size > max_chars):
             break
         out.append(dict(it))
         chars += size
@@ -75,13 +92,28 @@ def select_items(items: list[dict]) -> list[dict]:
     return out
 
 
+def first_sense(items: list[dict], key: str = "text") -> str:
+    """Полный текст значения для коротких подписей: первое значение с русским текстом,
+    не «см. X», если такое есть; иначе первое значение."""
+    senses = [it.get(key) or it["text"] for it in items if it["kind"] == "sense"]
+    for s in senses:
+        body = _NUM_RE.sub("", s).strip()
+        if CYR_RE.search(body) and not _REF_RE.match(body):
+            return s
+    return senses[0] if senses else ""
+
+
+def cut_gloss(s: str) -> str:
+    """Короткая подпись из полного значения: без нумерации, не длиннее 80 символов.
+    Русский и узбекский режутся одинаково — узбекский берётся из перевода полной строки,
+    а не переводится отдельно обрезанным (модель «дописывала» обрезанное)."""
+    s = _NUM_RE.sub("", s or "").strip()
+    return s if len(s) <= 80 else s[:80].rsplit(" ", 1)[0] + "…"
+
+
 def short(items: list[dict], key: str = "text") -> str:
-    """Короткое значение для списков: первое значение без нумерации."""
-    for it in items:
-        if it["kind"] == "sense":
-            s = _NUM_RE.sub("", it.get(key) or it["text"]).strip()
-            return s if len(s) <= 80 else s[:80].rsplit(" ", 1)[0] + "…"
-    return ""
+    """Короткое значение для списков."""
+    return cut_gloss(first_sense(items, key))
 
 
 def marks_to_numbered(reading: str) -> str:
@@ -115,91 +147,95 @@ def entry_readings(entry: BkrsEntry, items: list[dict]) -> list[str]:
     return out
 
 
-def short_for(entry: BkrsEntry, pinyin: str | None = None) -> str:
-    """Короткое значение статьи; если задано чтение и в статье их несколько — значение
-    именно этого чтения ("" — если такого чтения в статье нет)."""
+def sense_for(entry: BkrsEntry, pinyin: str | None = None) -> str:
+    """Полное первое значение статьи; если задано чтение и в статье их несколько —
+    значение именно этого чтения ("" — если такого чтения в статье нет)."""
     readings, items = parsed(entry)
+    if not has_russian(items):
+        return ""
     own = entry_readings(entry, items)
     if not pinyin or len(own) <= 1:
-        return short(items)
+        return first_sense(items)
     by = dsl.assign_readings(items, readings, own)  # строки по чтениям самой статьи
     key = dsl.match_reading(pinyin.split(",")[0].strip(), list(by))
-    return short(by[key]) if key else ""
+    return first_sense(by[key]) if key else ""
+
+
+def short_for(entry: BkrsEntry, pinyin: str | None = None) -> str:
+    return cut_gloss(sense_for(entry, pinyin))
+
+
+async def _to_uz(session: AsyncSession, svc: Services, texts: list[str]) -> dict[str, str]:
+    """Перевод ru→uz того, что можно: кэш + сервис; недоступное/негодное — отсутствует."""
+    uniq = list(dict.fromkeys(t for t in texts if t))
+    if not uniq or not svc.translator or not (await svc.available(session))["translate"]:
+        return {}
+    try:
+        out = await svc.translator.translate(session, uniq, "ru", "uz", partial=True)
+    except TranslationUnavailable:
+        return {}
+    return {t: u for t, u in zip(uniq, out) if u}
+
+
+def _src_text(it: dict) -> str:
+    return it["tr"] if it["kind"] == "ex" else it["text"]
 
 
 async def translate_items(session: AsyncSession, svc: Services, groups: list[list[dict]],
-                          lang: str) -> str:
-    """Готовит строки к показу на языке lang. Возвращает вид источника:
-    "bkrs" (русский оригинал), "bkrs_mt" (переведено), "bkrs_ru" (перевод недоступен)."""
+                          lang: str) -> list[str]:
+    """Готовит строки к показу на языке lang (по строке: переведённые — по-узбекски,
+    остальные — по-русски). Возвращает вид источника для каждой группы (чтения):
+    bkrs | bkrs_mt | bkrs_part | bkrs_ru."""
     if lang != "uz":
-        return "bkrs"
-    texts: list[str] = []
+        return ["bkrs"] * len(groups)
+    done = await _to_uz(session, svc, [_src_text(it) for items in groups for it in items])
+    kinds = []
     for items in groups:
+        texts = [t for t in map(_src_text, items) if t]
+        hit = sum(1 for t in texts if t in done)
+        kinds.append("bkrs" if not texts else "bkrs_mt" if hit == len(texts)
+                     else "bkrs_part" if hit else "bkrs_ru")
         for it in items:
             if it["kind"] == "ex":
-                if it["tr"]:
-                    texts.append(it["tr"])
-            else:
-                texts.append(it["text"])
-    if not texts:
-        return "bkrs"
-    if not svc.translator or not (await svc.available(session))["translate"]:
-        return "bkrs_ru"
-    uniq = list(dict.fromkeys(texts))
-    try:
-        done = dict(zip(uniq, await svc.translator.translate(session, uniq, "ru", "uz")))
-    except TranslationUnavailable:
-        return "bkrs_ru"
-    for items in groups:
-        for it in items:
-            if it["kind"] == "ex":
-                it["tr"] = done.get(it["tr"], it["tr"])
-                it["text"] = f"{it['zh']} {it['tr']}".strip()
-            else:
-                it["text"] = done.get(it["text"], it["text"])
-    return "bkrs_mt"
+                if it["tr"] in done:
+                    it["tr"] = done[it["tr"]]
+                    it["text"] = f"{it['zh']} {it['tr']}".strip()
+            elif it["text"] in done:
+                it["text"] = done[it["text"]]
+    return kinds
 
 
 async def apply_short_glosses(session: AsyncSession, svc: Services, rows: list[dict],
                               lang: str, key: str = "zh") -> None:
     """Короткие значения БКРС для списков (разбор фразы по словам, кандидаты, словосочетания).
-    Меняет rows на месте: gloss / gloss_kind = bkrs | bkrs_mt.
+    Меняет rows на месте.
 
     ru — значение БКРС всегда (как на сайте).
-    uz — значение редакции (человеческий узбекский) не трогаем; остальное — перевод БКРС;
-         если перевода нет — русский БКРС вместо английского CC-CEDICT (узбекский
-         Wiktionary оставляем: он хотя бы на узбекском)."""
+    uz — значение редакции (человеческий узбекский) не трогаем; остальное — перевод полной
+         строки значения, обрезанный так же, как русский; если перевода нет — русский БКРС
+         (gloss_kind bkrs_ru) вместо английского CC-CEDICT; узбекский Wiktionary оставляем."""
     if lang not in ("ru", "uz") or not rows:
         return
     if lang == "uz":
         rows = [r for r in rows if r.get("gloss_kind") != "curated"]
     entries = await find(session, (r[key] for r in rows))
-    # значение того чтения, что показано в строке (кандидат «yú», словосочетание и т.п.)
-    glosses: dict[int, str] = {}
+    # полное значение того чтения, что показано в строке (кандидат «yú», словосочетание)
+    full: dict[int, str] = {}
     for i, r in enumerate(rows):
         e = entries.get(r[key])
-        g = short_for(e, r.get("pinyin")) if e else ""
-        if g:
-            glosses[i] = g
-    if not glosses:
+        s = sense_for(e, r.get("pinyin")) if e else ""
+        if s:
+            full[i] = s
+    if not full:
         return
-    if lang == "uz":
-        done: dict[str, str] = {}
-        if svc.translator and (await svc.available(session))["translate"]:
-            uniq = list(dict.fromkeys(glosses.values()))
-            try:
-                done = dict(zip(uniq, await svc.translator.translate(session, uniq, "ru", "uz")))
-            except TranslationUnavailable:
-                done = {}
-        for i, r in enumerate(rows):
-            g = glosses.get(i)
-            if not g:
-                continue
-            if g in done:
-                r["gloss"], r["gloss_kind"] = done[g], "bkrs_mt"
-            elif r.get("gloss_kind") in ("cedict_en", "", "_bkrs_only"):
-                r["gloss"], r["gloss_kind"] = g, "bkrs"
+    if lang == "ru":
+        for i, s in full.items():
+            rows[i]["gloss"], rows[i]["gloss_kind"] = cut_gloss(s), "bkrs"
         return
-    for i, r in enumerate(rows):
-        if i in glosses:
-            r["gloss"], r["gloss_kind"] = glosses[i], "bkrs"
+    done = await _to_uz(session, svc, list(full.values()))
+    for i, s in full.items():
+        r = rows[i]
+        if s in done:
+            r["gloss"], r["gloss_kind"] = cut_gloss(done[s]), "bkrs_mt"
+        elif r.get("gloss_kind") in ("cedict_en", "", "_bkrs_only"):
+            r["gloss"], r["gloss_kind"] = cut_gloss(s), "bkrs_ru"

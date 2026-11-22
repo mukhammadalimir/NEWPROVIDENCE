@@ -54,7 +54,9 @@ def pretty(text: str) -> str:
     return re.sub(r"([oOgG])[" + re.escape(_APOSTROPHES) + "]", r"\1‘", text)
 
 
-_TUTUQ_RE = re.compile(r"(?<=[A-Za-z])['`´ʼ′](?=[A-Za-z])")
+# тутуқ белгиси: апостроф между буквами, кроме o‘/g‘ (их делает pretty); модель иногда
+# пишет его как ‘ или ʻ (fe‘l → fe’l)
+_TUTUQ_RE = re.compile(r"(?<=[A-Za-z])(?<![oOgG])['`´ʼ′‘ʻ](?=[A-Za-z])")
 
 
 def typographic(text: str) -> str:
