@@ -87,6 +87,8 @@ class FakeGoogle:
     def __init__(self):
         self.calls = []
         self.fail = False
+        self.gemini_fail = False
+        self.gemini_reply = None  # подмена текста ответа Gemini (для проверки ошибок)
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.calls.append(request)
@@ -98,6 +100,13 @@ class FakeGoogle:
                 (body["source"], body["target"], q), f"[{body['target']}] {q}")}
                 for q in body["q"]]
             return httpx.Response(200, json={"data": {"translations": out}})
+        if request.url.host == "generativelanguage.googleapis.com":
+            if self.gemini_fail:
+                return httpx.Response(429, text="quota")
+            prompt = body["contents"][0]["parts"][0]["text"]
+            texts = json.loads(prompt.rsplit("Input:\n", 1)[1])
+            out = self.gemini_reply or json.dumps([f"[gemini] {t}" for t in texts], ensure_ascii=False)
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": out}]}}]})
         if request.url.host == "texttospeech.googleapis.com":
             fake = f"AUDIO:{body['input']['text']}:{body['audioConfig']['speakingRate']}"
             return httpx.Response(200, json={"audioContent": base64.b64encode(fake.encode()).decode()})

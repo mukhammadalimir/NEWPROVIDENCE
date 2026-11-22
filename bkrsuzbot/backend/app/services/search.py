@@ -155,7 +155,7 @@ async def _search_word_lang(session, svc, query, source, user_target, avail, bas
         "source": query, "translation": zh, "zh": zh,
         "pinyin": py.text_to_pinyin(zh, seg),
         "words": await _word_breakdown(session, seg, source),
-        "provider": "Google Translate"}}
+        "provider": svc.translator.label}}
 
 
 async def _text_from_zh(session, svc, query, lang, avail, base) -> dict:
@@ -167,7 +167,7 @@ async def _text_from_zh(session, svc, query, lang, avail, base) -> dict:
     if avail["translate"]:
         try:
             (text["translation"],) = await svc.translator.translate(session, [query], "zh", lang)
-            text["provider"] = "Google Translate"
+            text["provider"] = svc.translator.label
             notices.append("mt_used")
         except TranslationUnavailable:
             notices.append("translate_failed")

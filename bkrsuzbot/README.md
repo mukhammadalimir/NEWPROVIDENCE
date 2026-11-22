@@ -98,7 +98,7 @@ Mini App ──► api (FastAPI) ───────────────�
 | ✅ **Tahririyat lug‘ati** / Словарь редакции | редакционная карточка, проверенная админом |
 | ✍️ **Tahririyat · tekshirilmagan** | редакционная карточка, ещё не проверенная |
 | 📖 **CC-CEDICT · inglizcha** (`EN`) | английское определение из CC-CEDICT — **не** выдаётся за узбекский словарь |
-| 🤖 **Mashina tarjimasi** (`MT`) | машинный перевод Google (определений CC-CEDICT, словосочетаний, фраз) |
+| 🤖 **Mashina tarjimasi** (`MT`) | машинный перевод Gemini / Google Translate (определений CC-CEDICT, словосочетаний, фраз) |
 | ✨ **AI yaratgan** | пояснение/примеры от Claude, только по кнопке, с пометкой «возможны ошибки» |
 
 - **CC-CEDICT** (124 188 статей, лицензия CC BY-SA 4.0, https://cc-cedict.org) — иероглифы,
@@ -151,8 +151,16 @@ Mini App ──► api (FastAPI) ───────────────�
 | `BOT_TOKEN` | да | бот и проверка initData | @BotFather |
 | `WEBAPP_URL` | для Mini App | HTTPS-адрес Mini App | ваш домен (см. §7) |
 | `ADMIN_IDS` | для админки | Telegram ID админов | @userinfobot |
+| `GEMINI_API_KEY` | бесплатный машинный перевод | Gemini API (`GEMINI_MODEL`, по умолч. `gemini-2.5-flash`) | https://aistudio.google.com/apikey |
 | `GOOGLE_API_KEY` | для перевода и озвучки | Cloud Translation + Text-to-Speech | Google Cloud Console |
 | `ANTHROPIC_API_KEY` | нет | AI-пояснения и примеры | https://platform.claude.com |
+
+**Gemini (бесплатный перевод, без карты):** https://aistudio.google.com/apikey → *Create API key* →
+вписать в `.env` как `GEMINI_API_KEY`. Используется только для машинного перевода
+(определения CC-CEDICT, словосочетания, фразы); результат помечается как машинный и кэшируется в БД.
+Бесплатная квота ограничена по числу запросов в минуту/день; на бесплатном тарифе Google может
+использовать запросы для улучшения своих моделей. Если заданы и `GEMINI_API_KEY`, и `GOOGLE_API_KEY`,
+сначала пробуется Gemini, при ошибке — Cloud Translation. Озвучка по-прежнему требует `GOOGLE_API_KEY`.
 
 **Google Cloud (перевод + озвучка):**
 

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     tts_slow_rate: float = 0.7
     audio_cache_dir: str = "/data/audio"
 
+    # --- Google Gemini: бесплатный машинный перевод (ключ https://aistudio.google.com/apikey) ---
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+
     # --- AI-объяснения (необязательно) ---
     anthropic_api_key: str = ""
     ai_model: str = "claude-opus-5-5"

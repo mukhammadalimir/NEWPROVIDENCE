@@ -12,7 +12,7 @@ from app.config import Settings
 from app.models import FeatureFlag
 from app.services.ai import AIExplainer
 from app.services.ratelimit import RateLimiter
-from app.services.translate import GoogleTranslator
+from app.services.translate import FallbackTranslator, GeminiTranslator, GoogleTranslator
 from app.services.tts import GoogleTTS
 
 # Функции, которыми админ может управлять (вкл/выкл).
@@ -23,8 +23,13 @@ class Services:
     def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None):
         self.settings = settings
         self.http = http or httpx.AsyncClient()
-        self.translator = (GoogleTranslator(settings.translate_key, self.http)
-                           if settings.translate_key else None)
+        providers = []
+        if settings.gemini_api_key:
+            providers.append(GeminiTranslator(settings.gemini_api_key, settings.gemini_model, self.http))
+        if settings.translate_key:
+            providers.append(GoogleTranslator(settings.translate_key, self.http))
+        self.translator = (providers[0] if len(providers) == 1
+                           else FallbackTranslator(providers) if providers else None)
         self.tts = (GoogleTTS(settings.tts_key, self.http, settings.tts_voices,
                               settings.audio_cache_dir, settings.tts_slow_rate)
                     if settings.tts_key else None)
