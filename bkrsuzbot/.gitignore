@@ -4,3 +4,10 @@ miniapp/dist/
 __pycache__/
 .pytest_cache/
 *.pyc
+.venv/
+*.db
+*.db-wal
+*.db-shm
+audio_cache/
+.data_imported
+.bkrs_imported

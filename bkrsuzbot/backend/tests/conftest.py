@@ -1,4 +1,5 @@
-"""Тесты работают с настоящей PostgreSQL (TEST_DATABASE_URL) и фрагментом CC-CEDICT.
+"""Тесты работают с настоящей PostgreSQL (TEST_DATABASE_URL) или с файлом SQLite
+(TEST_DATABASE_URL=sqlite+aiosqlite:///test.db) и фрагментом CC-CEDICT.
 
 Внешние сервисы (Google, Telegram) не вызываются: вместо сети используется
 httpx.MockTransport — это тестовые двойники, а не рабочая интеграция.
@@ -42,6 +43,12 @@ def database():
     import asyncio
 
     async def reset():
+        if engine.dialect.name == "sqlite":
+            await engine.dispose()
+            db_file = Path(engine.url.database)
+            for f in (db_file, Path(f"{db_file}-wal"), Path(f"{db_file}-shm")):
+                f.unlink(missing_ok=True)
+            return
         async with engine.begin() as conn:
             await conn.execute(text("DROP SCHEMA public CASCADE"))
             await conn.execute(text("CREATE SCHEMA public"))
@@ -87,6 +94,8 @@ class FakeGoogle:
     def __init__(self):
         self.calls = []
         self.fail = False
+        self.gemini_fail = False
+        self.gemini_reply = None  # подмена текста ответа Gemini (для проверки ошибок)
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.calls.append(request)
@@ -98,6 +107,13 @@ class FakeGoogle:
                 (body["source"], body["target"], q), f"[{body['target']}] {q}")}
                 for q in body["q"]]
             return httpx.Response(200, json={"data": {"translations": out}})
+        if request.url.host == "generativelanguage.googleapis.com":
+            if self.gemini_fail:
+                return httpx.Response(429, text="quota")
+            prompt = body["contents"][0]["parts"][0]["text"]
+            texts = json.loads(prompt.rsplit("Input:\n", 1)[1])
+            out = self.gemini_reply or json.dumps([f"[gemini] {t}" for t in texts], ensure_ascii=False)
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": out}]}}]})
         if request.url.host == "texttospeech.googleapis.com":
             fake = f"AUDIO:{body['input']['text']}:{body['audioConfig']['speakingRate']}"
             return httpx.Response(200, json={"audioContent": base64.b64encode(fake.encode()).decode()})
@@ -113,7 +129,10 @@ def google():
 def make_services(tmp_path, google):
     def make(**overrides) -> Services:
         settings = Settings(**{"google_api_key": "test-key", "audio_cache_dir": str(tmp_path),
-                               "anthropic_api_key": "", **overrides})
+                               "anthropic_api_key": "", "gemini_api_key": "",
+                               "gemini_model": "gemini-flash-lite-latest",
+                               # без ключа Google — без озвучки (бесплатный edge-tts проверяется отдельно)
+                               "tts_provider": "google", **overrides})
         return Services(settings, http=httpx.AsyncClient(transport=httpx.MockTransport(google.handler)))
     return make
 

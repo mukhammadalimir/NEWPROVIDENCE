@@ -14,8 +14,11 @@ export function SourceBadge({ kind, verified = true }: { kind: Kind; verified?: 
     wikt: "srcWikt",
     mt: "srcMt",
     ai: "srcAi",
+    bkrs: "srcBkrs",
+    bkrs_mt: "srcBkrsMt",
+    bkrs_ru: "srcBkrsRu",
   };
-  const cls = kind === "curated" && verified ? "ok" : kind;
+  const cls = kind === "curated" && verified ? "ok" : kind.startsWith("bkrs") ? "bkrs" : kind;
   return <span className={`badge badge-${cls}`}>{t(map[kind])}</span>;
 }
 
@@ -25,6 +28,8 @@ export function MiniSource({ kind }: { kind: Kind }) {
   if (kind === "cedict_en") return <sup className="mini" title={t("srcCedict")}>EN</sup>;
   if (kind === "mt") return <sup className="mini mt" title={t("srcMt")}>MT</sup>;
   if (kind === "wikt") return <sup className="mini" title={t("srcWikt")}>W</sup>;
+  if (kind === "bkrs") return <sup className="mini bkrs" title={t("srcBkrs")}>БКРС</sup>;
+  if (kind === "bkrs_mt") return <sup className="mini bkrs" title={t("srcBkrsMt")}>БКРС·MT</sup>;
   return null;
 }
 
@@ -34,6 +39,8 @@ export function Legend({ kinds }: { kinds: Kind[] }) {
   if (kinds.includes("cedict_en")) parts.push(`EN — ${t("srcCedict")}`);
   if (kinds.includes("wikt")) parts.push(`W — ${t("srcWikt")}`);
   if (kinds.includes("mt")) parts.push(`MT — ${t("srcMt")}`);
+  if (kinds.includes("bkrs")) parts.push(`БКРС — ${t("srcBkrs")}`);
+  if (kinds.includes("bkrs_mt")) parts.push(`БКРС·MT — ${t("srcBkrsMt")}`);
   return parts.length ? <div className="legend">{parts.join(" · ")}</div> : null;
 }
 

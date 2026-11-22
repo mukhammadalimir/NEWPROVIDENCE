@@ -8,6 +8,7 @@ from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramUnauthorizedError
 from aiogram.types import BotCommand, MenuButtonDefault, MenuButtonWebApp, WebAppInfo
 from sqlalchemy import delete
 
@@ -89,13 +90,17 @@ async def main() -> None:
     dp.callback_query.middleware(mw)
     dp.inline_query.middleware(mw)
     dp.include_router(router)
-    await setup_bot_profile(bot, settings.webapp_url)
-    asyncio.create_task(cleanup_payloads())
-    log.info("services configured: %s", svc.configured())
     try:
+        await setup_bot_profile(bot, settings.webapp_url)
+        asyncio.create_task(cleanup_payloads())
+        log.info("services configured: %s", svc.configured())
         await dp.start_polling(bot)
+    except TelegramUnauthorizedError:
+        raise SystemExit("BOT_TOKEN noto‘g‘ri (Telegram: Unauthorized). "
+                         "@BotFather'dan tokenni qayta nusxalab .env ga yozing.") from None
     finally:
         await svc.aclose()
+        await bot.session.close()
 
 
 if __name__ == "__main__":

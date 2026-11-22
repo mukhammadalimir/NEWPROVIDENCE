@@ -5,6 +5,24 @@ from html import escape as e
 from app.bot.i18n import t
 
 MAX_LEN = 3900  # лимит Telegram — 4096 символов
+GLOSS_MARKS = {"mt": " 🤖", "cedict_en": " 📖", "wikt": " 🌐", "bkrs": " 📚", "bkrs_mt": " 📚🤖"}
+
+
+def bkrs_lines(items: list[dict]) -> list[str]:
+    """Строки статьи 大БКРС: значения по порядку словаря, под ними — примеры."""
+    out = []
+    for it in items:
+        if it["kind"] == "head":
+            out.append(f"<i>{e(it['text'])}</i>")
+        elif it["kind"] == "ex":
+            if not it.get("zh"):  # пример без иероглифов — просто текст, один раз
+                out.append(f"    ▫️ <i>{e(it.get('tr') or it['text'])}</i>")
+                continue
+            tr = f" — <i>{e(it['tr'])}</i>" if it.get("tr") else ""
+            out.append(f"    ▫️ {e(it['zh'])}{tr}")
+        else:
+            out.append(e(it["text"]))
+    return out
 
 
 def meaning_lang(result: dict) -> str:
@@ -30,27 +48,36 @@ def card_text(card: dict, ui: str, lang: str) -> str:
         if r.get("measure_word"):
             lines.append(f"{t(ui, 'measure')}: {e(r['measure_word'])}")
 
-        if r["senses"]:
-            verified = all(s["verified"] for s in r["senses"])
-            src = ("src_wikt" if all(s["kind"] == "wikt" for s in r["senses"])
+        senses = r["senses"]
+        if r.get("bkrs"):
+            # редакционные узбекские значения (написаны человеком) — над переводом БКРС
+            senses = [s for s in senses if s["kind"] == "curated"] if lang == "uz" else []
+        if senses:
+            verified = all(s["verified"] for s in senses)
+            src = ("src_wikt" if all(s["kind"] == "wikt" for s in senses)
                    else "src_curated_ok" if verified else "src_curated")
             lines.append(f"<b>{t(ui, 'meanings')}</b> — <i>{t(ui, src)}</i>")
-            for i, s in enumerate(r["senses"], 1):
+            for i, s in enumerate(senses, 1):
                 pos = f"<i>{e(s['pos'])}</i> " if s.get("pos") else ""
                 lines.append(f"{i}. {pos}{e(', '.join(s['items']))}")
-        if r.get("english_mt"):
-            lines.append(f"<i>{t(ui, 'src_mt')}:</i> {e('; '.join(r['english_mt'][:6]))}")
-        if r.get("english"):
-            lines.append(f"<i>{t(ui, 'src_cedict')}:</i> {e('; '.join(r['english'][:6]))}")
-        if not r["senses"] and not r.get("english_mt"):
-            lines.append(f"<i>{t(ui, 'no_target')}</i>")
+        if r.get("bkrs"):
+            title = t(ui, "meanings") if not senses else "大БКРС"
+            lines.append(f"<b>{title}</b> — <i>{t(ui, 'src_' + r['bkrs_kind'])}</i>")
+            lines.extend(bkrs_lines(r["bkrs"]))
+        if not r.get("bkrs"):  # английские значения — только если нет статьи БКРС
+            if r.get("english_mt"):
+                lines.append(f"<i>{t(ui, 'src_mt')}:</i> {e('; '.join(r['english_mt'][:6]))}")
+            if r.get("english"):
+                lines.append(f"<i>{t(ui, 'src_cedict')}:</i> {e('; '.join(r['english'][:6]))}")
+            if not r["senses"] and not r.get("english_mt"):
+                lines.append(f"<i>{t(ui, 'no_target')}</i>")
 
         if r.get("usage"):
             lines.append(f"<b>{t(ui, 'usage')}:</b> {e(r['usage']['text'])}")
         if r["collocations"]:
             lines.append(f"<b>{t(ui, 'colloc')}</b>")
             for c in r["collocations"][:6]:
-                mark = {"mt": " 🤖", "cedict_en": " 📖", "wikt": " 🌐"}.get(c["gloss_kind"], "")
+                mark = GLOSS_MARKS.get(c["gloss_kind"], "")
                 gloss = f" — {e(c['gloss'])}{mark}" if c.get("gloss") else ""
                 lines.append(f"• {e(c['zh'])} <i>{e(c['pinyin'])}</i>{gloss}")
         if r["examples"]:
@@ -84,7 +111,7 @@ def text_result(result: dict, ui: str) -> str:
     if tx["words"]:
         lines.append(f"\n<b>{t(ui, 'words')}</b>")
         for w in tx["words"][:12]:
-            mark = {"cedict_en": " 📖", "wikt": " 🌐"}.get(w["gloss_kind"], "")
+            mark = GLOSS_MARKS.get(w["gloss_kind"], "")
             lines.append(f"• {e(w['zh'])} <i>{e(w['pinyin'])}</i> — {e(w['gloss'])}{mark}")
     return _trim("\n".join(lines))
 

@@ -1,6 +1,9 @@
 export type Lang = "uz" | "ru";
 export type Source = "auto" | "zh" | "pinyin" | "uz" | "ru";
-export type Kind = "curated" | "cedict_en" | "wikt" | "mt" | "ai";
+export type Kind = "curated" | "cedict_en" | "wikt" | "mt" | "ai" | "bkrs" | "bkrs_mt" | "bkrs_ru";
+
+/** Строка статьи 大БКРС: заголовок раздела, значение или пример (zh + перевод). */
+export interface BkrsItem { level: number; kind: "head" | "sense" | "ex"; reading: string | null; text: string; zh?: string; tr?: string }
 
 export interface Me {
   id: number;
@@ -20,7 +23,7 @@ export interface Example { zh: string; pinyin: string; translation: string | nul
 export interface Colloc { zh: string; pinyin: string; gloss: string; gloss_kind: Kind }
 
 export interface Reading {
-  entry_id: number;
+  entry_id: number | null;
   key: string;
   pinyin: string;
   pinyin_num: string;
@@ -34,6 +37,8 @@ export interface Reading {
   examples: Example[];
   collocations: Colloc[];
   has_curated: boolean;
+  bkrs?: BkrsItem[];
+  bkrs_kind?: "bkrs" | "bkrs_mt" | "bkrs_ru";
   favorite_id?: number | null;
 }
 

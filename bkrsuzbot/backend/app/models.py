@@ -82,6 +82,21 @@ class WiktPair(Base):
     __table_args__ = (Index("ix_wikt_lang_term", "lang", "term"), Index("ix_wikt_lang_zh", "lang", "zh"))
 
 
+class BkrsEntry(Base):
+    """大БКРС (bkrs.info): человеческий китайско-русский словарь. Базы bkrs.info можно
+    использовать свободно, с указанием источника. body — разметка DSL как в дампе
+    (разбирается при показе: app/text/dsl.py), одна статья может содержать несколько чтений."""
+
+    __tablename__ = "bkrs_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    headword: Mapped[str] = mapped_column(String(255))
+    pinyin: Mapped[str] = mapped_column(String(512), default="")  # "dǎ, dá"
+    body: Mapped[str] = mapped_column(Text)
+
+    __table_args__ = (Index("ix_bkrs_headword", "headword"),)
+
+
 class User(Base):
     __tablename__ = "users"
 

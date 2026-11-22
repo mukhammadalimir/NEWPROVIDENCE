@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, ApiError } from "../api";
 import { useApp } from "../ctx";
 import { haptic, tg } from "../telegram";
-import type { Card, Explain, Reading } from "../types";
+import type { BkrsItem, Card, Explain, Reading } from "../types";
 import { Icon } from "./Icon";
 import { Audio, copyText, Legend, MiniSource, SourceBadge } from "./ui";
 import { ReportSheet } from "./ReportSheet";
@@ -17,6 +17,11 @@ export function shareText(text: string, botUsername: string) {
 export function cardPlainText(card: Card, lang: string): string {
   const lines = [card.headword + (card.traditional ? ` (${card.traditional})` : "")];
   for (const r of card.readings) {
+    if (r.bkrs?.length) {
+      lines.push(r.pinyin);
+      for (const it of r.bkrs) lines.push(it.kind === "ex" ? `  ${it.zh} — ${it.tr}` : it.text);
+      continue;
+    }
     const meaning = r.senses.flatMap((s) => s.items).join(", ") || (r.english_mt ?? r.english).slice(0, 3).join("; ");
     lines.push(`${r.pinyin} — ${meaning}`);
   }
@@ -40,7 +45,7 @@ export function WordCard({ card, lang, query }: { card: Card; lang: string; quer
       </header>
 
       {card.readings.map((r) => (
-        <ReadingBlock key={r.entry_id + r.key} r={r} card={card} lang={lang} multi={card.readings.length > 1} />
+        <ReadingBlock key={`${r.entry_id ?? "b"}-${r.key}`} r={r} card={card} lang={lang} multi={card.readings.length > 1} />
       ))}
 
       <footer className="card-actions">
@@ -64,8 +69,11 @@ function ReadingBlock({ r, card, lang, multi }: { r: Reading; card: Card; lang: 
   const [favId, setFavId] = useState<number | null>(r.favorite_id ?? null);
   const [ai, setAi] = useState<Explain | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
-  const gloss = r.senses.flatMap((s) => s.items).join(", ") || (r.english_mt ?? r.english).slice(0, 2).join("; ");
-  const verified = r.senses.every((s) => s.verified);
+  const gloss = bkrsShort(r.bkrs) || r.senses.flatMap((s) => s.items).join(", ")
+    || (r.english_mt ?? r.english).slice(0, 2).join("; ");
+  // при статье БКРС: узбекские значения редакции (написаны человеком) показываем над ней
+  const senses = r.bkrs?.length ? (lang === "uz" ? r.senses.filter((s) => s.kind === "curated") : []) : r.senses;
+  const verified = senses.every((s) => s.verified);
 
   const toggleFav = async () => {
     haptic();
@@ -86,6 +94,7 @@ function ReadingBlock({ r, card, lang, multi }: { r: Reading; card: Card; lang: 
   const loadAi = async () => {
     setAiBusy(true);
     try {
+      if (r.entry_id == null) return;
       setAi(await api.explain(r.entry_id, lang === "ru" ? "ru" : "uz"));
     } catch (e) {
       toast(e instanceof ApiError && e.code === "rate_limited" ? t("rateLimited") : t("aiFailed"));
@@ -113,30 +122,37 @@ function ReadingBlock({ r, card, lang, multi }: { r: Reading; card: Card; lang: 
 
       {r.measure_word && <div className="meta"><span>{t("measure")}</span> <b lang="zh-CN">{r.measure_word}</b></div>}
 
-      {r.senses.length > 0 && (
+      {senses.length > 0 && (
         <div className="block">
-          <div className="block-title">{t("meanings")} <SourceBadge kind={r.senses.every((s) => s.kind === "wikt") ? "wikt" : "curated"} verified={verified} /></div>
+          <div className="block-title">{t("meanings")} <SourceBadge kind={senses.every((s) => s.kind === "wikt") ? "wikt" : "curated"} verified={verified} /></div>
           <ol className="senses">
-            {r.senses.map((s, i) => (
+            {senses.map((s, i) => (
               <li key={i}>{s.pos && <em>{s.pos}</em>} {s.items.join(", ")}</li>
             ))}
           </ol>
         </div>
       )}
 
-      {r.english_mt && r.english_mt.length > 0 && (
+      {r.bkrs && r.bkrs.length > 0 && (
+        <div className="block">
+          <div className="block-title">{senses.length ? "大БКРС" : t("meanings")} <SourceBadge kind={r.bkrs_kind ?? "bkrs"} /></div>
+          <BkrsList items={r.bkrs} />
+        </div>
+      )}
+
+      {!r.bkrs?.length && r.english_mt && r.english_mt.length > 0 && (
         <div className="block">
           <div className="block-title">{t(r.senses.length ? "english" : "meanings")} <SourceBadge kind="mt" /></div>
           <p className="defs">{r.english_mt.slice(0, 8).join("; ")}</p>
         </div>
       )}
-      {r.english.length > 0 && (
+      {!r.bkrs?.length && r.english.length > 0 && (
         <details className="block" open={!r.senses.length && !r.english_mt}>
           <summary className="block-title">{t("english")} <SourceBadge kind="cedict_en" /></summary>
           <p className="defs" lang="en">{r.english.join("; ")}</p>
         </details>
       )}
-      {!r.senses.length && !r.english_mt && <p className="hint">{t("noTarget")}</p>}
+      {!r.bkrs?.length && !r.senses.length && !r.english_mt && <p className="hint">{t("noTarget")}</p>}
 
       {r.usage && (
         <div className="block">
@@ -170,7 +186,7 @@ function ReadingBlock({ r, card, lang, multi }: { r: Reading; card: Card; lang: 
         </div>
       )}
 
-      {me.services.ai && !ai && (
+      {me.services.ai && !ai && r.entry_id != null && (
         <button className="ai-btn" disabled={aiBusy} onClick={loadAi}>
           <Icon name="sparkles" size={16} /> {aiBusy ? t("loading") : t("aiExplain")}
         </button>
@@ -184,6 +200,30 @@ function ReadingBlock({ r, card, lang, multi }: { r: Reading; card: Card; lang: 
         </div>
       )}
     </section>
+  );
+}
+
+/** Первое значение БКРС без нумерации — для избранного. */
+function bkrsShort(items?: BkrsItem[]): string {
+  const s = items?.find((it) => it.kind === "sense");
+  return s ? s.text.replace(/^\s*(?:[IVXL]+\s+)?(?:\d+\)|[а-яa-z]\))\s*/, "").slice(0, 80) : "";
+}
+
+/** Статья 大БКРС: значения по порядку словаря, под каждым — примеры. */
+function BkrsList({ items }: { items: BkrsItem[] }) {
+  return (
+    <div className="bkrs">
+      {items.map((it, i) =>
+        it.kind === "head" ? <div key={i} className="bk-head">{it.text}</div>
+        : it.kind === "ex" ? (
+          it.zh ? (
+            <div key={i} className="bk-ex">
+              <span lang="zh-CN">{it.zh}</span>
+              {it.tr && <span className="bk-tr"> — {it.tr}</span>}
+            </div>
+          ) : <div key={i} className="bk-ex bk-tr">{it.tr || it.text}</div>
+        ) : <div key={i} className="bk-sense">{it.text}</div>)}
+    </div>
   );
 }
 

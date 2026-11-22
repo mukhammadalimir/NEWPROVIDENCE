@@ -15,11 +15,13 @@ import jieba
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import DictEntry
+from app.services import bkrs
 from app.services import dictionary as dic
 from app.services.container import Services
 from app.services.events import log_event
 from app.services.translate import TranslationUnavailable
 from app.text import detect as det
+from app.text import dsl
 from app.text import pinyin as py
 from app.text import uzbek
 
@@ -80,6 +82,19 @@ async def _search_zh(session, svc, query, lang, avail, base) -> dict:
         if entries:
             cards, notices = await dic.build_cards(session, svc, entries, lang, avail)
             return {**base, "type": "word", "cards": cards, "notices": notices}
+    # Нет в CC-CEDICT, но есть в 大БКРС (идиомы, устойчивые выражения, термины) —
+    # показываем статью словаря, как на bkrs.info, а не машинный перевод.
+    q = query.strip()
+    trimmed = q.rstrip("。！？.!?").strip()
+    tight = re.sub(r"\s*([,，])\s*", lambda m: m.group(1), trimmed)
+    # сначала написание с запятой (как в словаре), без знаков препинания — в последнюю очередь
+    variants = list(dict.fromkeys([q, trimmed, tight.replace(",", "，"), tight,
+                                   tight.replace("，", ","), han_only]))
+    found = await bkrs.find(session, variants)
+    entry = next((found[v] for v in variants if v in found), None)
+    if entry:
+        cards, notices = await dic.build_bkrs_cards(session, svc, entry, lang)
+        return {**base, "type": "word", "cards": cards, "notices": notices}
     return await _text_from_zh(session, svc, query, lang, avail, base)
 
 
@@ -95,8 +110,9 @@ async def _search_pinyin(session, svc, query, lang, avail, base) -> dict:
         cards, notices = await dic.build_cards(session, svc, entries, lang, avail)
         return {**base, "type": "word", "cards": cards, "notices": notices}
     wikt = await dic.wikt_meanings(session, lang, list(groups)[:MAX_CANDIDATES * 3])
-    return {**base, "type": "candidates",
-            "candidates": _candidates(groups, lang, syls, wikt)[:MAX_CANDIDATES]}
+    candidates = _candidates(groups, lang, syls, wikt)[:MAX_CANDIDATES]
+    await bkrs.apply_short_glosses(session, svc, candidates, lang, key="headword")
+    return {**base, "type": "candidates", "candidates": candidates}
 
 
 def _candidates(groups, lang, syls=None, wikt=None, order=None) -> list[dict]:
@@ -154,20 +170,20 @@ async def _search_word_lang(session, svc, query, source, user_target, avail, bas
     return {**base, "type": "text", "notices": ["mt_used"], "text": {
         "source": query, "translation": zh, "zh": zh,
         "pinyin": py.text_to_pinyin(zh, seg),
-        "words": await _word_breakdown(session, seg, source),
-        "provider": "Google Translate"}}
+        "words": await _word_breakdown(session, svc, seg, source),
+        "provider": svc.translator.label}}
 
 
 async def _text_from_zh(session, svc, query, lang, avail, base) -> dict:
     seg = _segment(query)
     text = {"source": query, "translation": None, "zh": query,
             "pinyin": py.text_to_pinyin(query, seg),
-            "words": await _word_breakdown(session, seg, lang), "provider": None}
+            "words": await _word_breakdown(session, svc, seg, lang), "provider": None}
     notices = []
     if avail["translate"]:
         try:
             (text["translation"],) = await svc.translator.translate(session, [query], "zh", lang)
-            text["provider"] = "Google Translate"
+            text["provider"] = svc.translator.label
             notices.append("mt_used")
         except TranslationUnavailable:
             notices.append("translate_failed")
@@ -180,20 +196,35 @@ def _segment(zh: str) -> list[str]:
     return [w for w in jieba.lcut(zh) if w.strip()]
 
 
-async def _word_breakdown(session, words: list[str], lang: str) -> list[dict]:
-    """Разбор китайского текста по словам (со словарными значениями)."""
+async def _word_breakdown(session, svc, words: list[str], lang: str) -> list[dict]:
+    """Разбор китайского текста по словам (значения из 大БКРС, иначе из словарей)."""
     out, seen = [], set()
-    wikt = await dic.wikt_meanings(session, lang, [w for w in words if dic._has_han(w)])
+    han = [w for w in words if dic._has_han(w)]
+    wikt = await dic.wikt_meanings(session, lang, han)
+    in_bkrs = await bkrs.find(session, han)
     for w in words:
         if w in seen or not dic._has_han(w):
             continue
         seen.add(w)
         entries: list[DictEntry] = await dic.find_by_headword(session, w)
-        if not entries:
+        if entries:
+            gloss, kind = dic.short_gloss(entries, lang, wikt)
+            common = [e for e in entries if not e.pinyin_num[:1].isupper()] or entries
+            pinyin = py.word_marks(common[0].pinyin_num)
+            if w in in_bkrs and len({e.pinyin_num.lower() for e in common}) > 1:
+                # несколько чтений: берём первое по БКРС (大夫 dàifu «врач», а не dàfū)
+                e_bk = in_bkrs[w]
+                first = next(iter(bkrs.entry_readings(e_bk, bkrs.parsed(e_bk)[1])), None)
+                marks = [py.word_marks(e.pinyin_num) for e in common]
+                pinyin = dsl.match_reading(first, marks) or pinyin
+        elif w in in_bkrs:
+            gloss, kind = "", "_bkrs_only"  # значение подставит apply_short_glosses
+            rds = bkrs.entry_readings(in_bkrs[w], bkrs.parsed(in_bkrs[w])[1])
+            pinyin = rds[0] if rds else py.text_to_pinyin(w)
+        else:
             continue
-        gloss, kind = dic.short_gloss(entries, lang, wikt)
-        out.append({"zh": w, "pinyin": py.word_marks(entries[0].pinyin_num),
-                    "gloss": gloss, "gloss_kind": kind})
+        out.append({"zh": w, "pinyin": pinyin, "gloss": gloss, "gloss_kind": kind})
         if len(out) >= 15:
             break
-    return out
+    await bkrs.apply_short_glosses(session, svc, out, lang)
+    return [w for w in out if w["gloss_kind"] != "_bkrs_only"]
