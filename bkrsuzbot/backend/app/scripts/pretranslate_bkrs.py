@@ -41,11 +41,34 @@ class Runner:
         self.last = 0.0
         self.lock = asyncio.Lock()  # общий темп для всех параллельных запросов
         self.requests = self.skipped = 0
-        self.rate_limited_in_row = self.unavailable_in_row = 0
+        # подряд неудачных запросов (по всем моделям) и полных кругов без успеха
+        self.fail_streak = 0
+        self.limit_rounds = self.busy_rounds = 0
 
     @property
     def tr(self) -> GeminiTranslator:
         return self.translators[self.current]
+
+    async def _next_model(self, msg: str, limited: bool):
+        """Модель перегружена или упёрлась в лимит — следующая (лимиты бесплатного ключа
+        у каждой модели свои). Если не отвечает ни одна — пауза 30 с … 5 мин."""
+        self.fail_streak += 1
+        self.current = (self.current + 1) % len(self.translators)
+        if self.fail_streak < len(self.translators):
+            return
+        self.fail_streak = 0
+        if limited:
+            self.limit_rounds += 1
+            if self.limit_rounds >= 6:
+                raise Stop("лимит бесплатного ключа Gemini исчерпан у всех моделей — "
+                           "продолжите позже (завтра), уже переведённое сохранено")
+        else:
+            self.busy_rounds += 1
+            if self.busy_rounds >= 16:  # ~1 час без ответа
+                raise Stop(f"Gemini долго недоступен ({msg[:100]}) — попробуйте позже")
+        wait = min(300, 30 * 2 ** (self.limit_rounds + self.busy_rounds - 1))
+        print(f"  все модели: {msg[:50]!r} — жду {wait} с…", flush=True)
+        await asyncio.sleep(wait)
 
     async def _pace(self):
         async with self.lock:
@@ -62,21 +85,17 @@ class Runner:
             try:
                 async with SessionLocal() as s:
                     await self.tr.translate(s, batch, "ru", "uz")
-                self.rate_limited_in_row = self.unavailable_in_row = 0
+                self.fail_streak = self.limit_rounds = self.busy_rounds = 0
                 return len(batch)
             except TranslationUnavailable as e:
                 msg = str(e)
-            if "http 429" in msg:
-                self.rate_limited_in_row += 1
-                if self.rate_limited_in_row >= 6:
-                    raise Stop("лимит бесплатного ключа Gemini исчерпан — продолжите позже "
-                               "(завтра), уже переведённое сохранено")
-                print(f"  429 (лимит), жду 65 с… [{self.tr.model}]", flush=True)
-                await asyncio.sleep(65)
-            elif any(f"http {c}" in msg for c in (400, 401, 403, 404)):
-                if "http 404" in msg and self.current + 1 < len(self.translators):
-                    self.current += 1  # модель недоступна — следующая
-                    continue
+            if "http 404" in msg:  # модель убрали — больше не пробуем
+                if len(self.translators) == 1:
+                    raise Stop(f"модель {self.tr.model} недоступна ({msg[:100]})")
+                print(f"  модель {self.tr.model} недоступна — убираю", flush=True)
+                del self.translators[self.current]
+                self.current %= len(self.translators)
+            elif any(f"http {c}" in msg for c in (400, 401, 403)):
                 raise Stop(f"Gemini отклонил запрос ({msg[:160]}). Проверьте GEMINI_API_KEY.")
             elif "bad response" in msg:
                 if len(batch) == 1:
@@ -84,13 +103,8 @@ class Runner:
                     return 0
                 mid = len(batch) // 2  # модель сбилась со счётом — делим пакет пополам
                 return await self.translate(batch[:mid]) + await self.translate(batch[mid:])
-            else:  # 5xx, сеть: модель перегружена — следующая модель, пауза
-                self.unavailable_in_row += 1
-                if self.unavailable_in_row >= 4 * len(self.translators):
-                    raise Stop(f"Gemini недоступен ({msg[:120]}) — попробуйте позже")
-                self.current = (self.current + 1) % len(self.translators)
-                print(f"  {msg[:60]} → {self.tr.model}, жду 20 с…", flush=True)
-                await asyncio.sleep(20)
+            else:  # 429 (лимит), 5xx и сеть (перегрузка) — следующая модель
+                await self._next_model(msg, limited="http 429" in msg)
 
 
 def batches(texts: list[str], size: int, max_chars: int):
@@ -110,13 +124,16 @@ async def main() -> int:
     st = get_settings()
     ap = argparse.ArgumentParser()
     ap.add_argument("--words", type=int, default=0, help="сколько самых частотных слов (0 — все)")
-    ap.add_argument("--batch", type=int, default=80, help="строк в одном запросе")
-    ap.add_argument("--max-chars", type=int, default=5000, help="символов в одном запросе")
+    ap.add_argument("--batch", type=int, default=100, help="строк в одном запросе")
+    ap.add_argument("--max-chars", type=int, default=9000, help="символов в одном запросе")
     ap.add_argument("--rpm", type=float, default=10, help="запросов в минуту (бесплатный ключ — ~10–15)")
     ap.add_argument("--workers", type=int, default=3,
                     help="параллельных запросов (ответ идёт 10–20 с; общий темп — --rpm)")
-    ap.add_argument("--models", default=f"{st.gemini_model},gemini-flash-latest",
-                    help="модели по очереди (при перегрузке — следующая)")
+    ap.add_argument("--models", default=",".join(dict.fromkeys([
+                        st.gemini_model, "gemini-3.1-flash-lite", "gemini-3.5-flash-lite",
+                        "gemini-flash-lite-latest", "gemini-flash-latest"])),
+                    help="модели по очереди: при перегрузке или лимите — следующая "
+                         "(у бесплатного ключа лимиты у каждой модели свои)")
     a = ap.parse_args()
     if not st.gemini_api_key:
         print("GEMINI_API_KEY не задан (backend/.env). Ключ: https://aistudio.google.com/apikey")
@@ -149,7 +166,10 @@ async def main() -> int:
         while not state["stop"] and not queue.empty():
             batch = queue.get_nowait()
             try:
-                state["done"] += await run.translate(batch)
+                # не «state["done"] += await …»: значение читается до await, и параллельные
+                # работники затирают прибавки друг друга
+                n = await run.translate(batch)
+                state["done"] += n
             except Stop as e:
                 state["stop"] = str(e)
                 return

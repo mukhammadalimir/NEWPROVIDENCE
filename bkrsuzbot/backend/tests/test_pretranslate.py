@@ -86,3 +86,27 @@ async def test_uz_translations_are_stored_typographic(session):
     http, _ = gemini(lambda t, m: (200, ["bo'lak, e'tibor" for _ in t]))
     (out,) = await GeminiTranslator("k", "m", http).translate(session, ["кусок пт"], "ru", "uz")
     assert out == "bo‘lak, e’tibor"
+
+
+async def test_limit_on_one_model_switches_to_another():
+    # у бесплатного ключа лимиты по моделям: 429 у «a» — сразу «b», без паузы
+    http, calls = gemini(lambda t, m: (429, "") if m == "a" else (200, [f"uz {x}" for x in t]))
+    run = pt.Runner("k", ["a", "b"], 1000, http)
+    assert await run.translate(["строка лимит а"]) == 1
+    assert [c[0] for c in calls] == ["a", "b"]
+    http2, calls2 = gemini(lambda t, m: (429, ""))
+    with pytest.raises(pt.Stop, match="у всех моделей"):
+        await pt.Runner("k", ["a", "b"], 1000, http2).translate(["строка лимит все"])
+    assert len(calls2) == 12  # 6 кругов по 2 модели
+
+
+async def test_all_models_busy_then_recover():
+    state = {"n": 0}
+
+    def handler(t, m):
+        state["n"] += 1
+        return (503, "") if state["n"] <= 5 else (200, [f"uz {x}" for x in t])
+    http, calls = gemini(handler)
+    run = pt.Runner("k", ["a", "b"], 1000, http)
+    assert await run.translate(["строка перегрузка"]) == 1
+    assert len(calls) == 6 and run.busy_rounds == 0  # после успеха счётчики сброшены
