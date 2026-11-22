@@ -11,3 +11,4 @@ __pycache__/
 audio_cache/
 .data_imported
 .bkrs_imported
+*.log

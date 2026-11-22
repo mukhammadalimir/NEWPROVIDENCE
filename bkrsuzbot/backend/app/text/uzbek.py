@@ -54,6 +54,15 @@ def pretty(text: str) -> str:
     return re.sub(r"([oOgG])[" + re.escape(_APOSTROPHES) + "]", r"\1‘", text)
 
 
+_TUTUQ_RE = re.compile(r"(?<=[A-Za-z])['`´ʼ′](?=[A-Za-z])")
+
+
+def typographic(text: str) -> str:
+    """Машинный перевод на узбекский — к единому виду: o‘, g‘ и тутуқ белгиси ’
+    (e'tibor → e’tibor). Модель пишет то так, то эдак."""
+    return _TUTUQ_RE.sub("’", pretty(text))
+
+
 def has_uz_latin_markers(text: str) -> bool:
     """o‘/g‘ или сочетания, невозможные в пиньине."""
     t = text.lower()

@@ -15,6 +15,7 @@ import hashlib
 import json
 import shutil
 from collections import OrderedDict
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlalchemy import select
@@ -48,20 +49,8 @@ def _mt_key(provider: str, text: str) -> str:
     return hashlib.sha256(f"mt|{provider}|ru|uz|{text}".encode()).hexdigest()
 
 
-async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
-    """Статьи БКРС для всех написаний словаря:
-    {написание: {"r": {ключ чтения: строки}, "o": порядок чтений как в БКРС,
-                 "g": короткое значение (ru), "gu": то же на узбекском, если переведено}}.
-    Строка: [0 заголовок | 1 значение, текст, uz?] или [2, пример zh, перевод ru, uz?]."""
-    readings: OrderedDict[str, OrderedDict[str, str]] = OrderedDict()
-    # тот же порядок чтений, что у карточки (dictionary.py, engine.ts): редакция, обычные,
-    # имена собственные последними — иначе статья 王 достанется фамилии Wáng
-    for e in sorted(rows, key=lambda e: (e.source != "curated",
-                                         e.pinyin_num[:1] != e.pinyin_num[:1].lower(), e.id)):
-        readings.setdefault(e.simplified, OrderedDict()).setdefault(
-            reading_key(e.pinyin_num), word_marks(e.pinyin_num))
-    found = await bkrs.find(session, list(readings))
-    # узбекские переводы строк БКРС, которые бот уже получал (только кэш, без новых запросов)
+async def uz_cache(session) -> Callable[[str], str | None]:
+    """Узбекские переводы строк БКРС, которые уже есть в кэше (бот или pretranslate_bkrs)."""
     cache = {c.key: (c.value or {}).get("text") for c in (await session.scalars(
         select(CacheItem).where(CacheItem.kind == "mt"))).all()}
 
@@ -71,8 +60,39 @@ async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
             if v:
                 return v
         return None
+    return uz
 
-    shards: dict[int, dict] = {}
+
+def article_strings(art: dict) -> list[str]:
+    """Все русские строки статьи, которые показываются в Mini App (для перевода на uz)."""
+    out = []
+    for lines in art["r"].values():
+        for line in lines:
+            t = line[2] if line[0] == 2 else line[1]
+            if t:
+                out.append(t)
+    if art.get("g"):
+        out.append(art["g"])
+    out.extend(v[0] for v in art.get("gp", {}).values())
+    return out
+
+
+async def collect_articles(session, rows: list[DictEntry],
+                           uz: Callable[[str], str | None] = lambda t: None) -> OrderedDict:
+    """Статьи БКРС для всех написаний словаря:
+    {написание: {"r": {ключ чтения: строки}, "o": порядок чтений как в БКРС,
+                 "g": короткое значение (ru), "gu": то же на узбекском, если переведено,
+                 "gp": {чтение: [ru, uz?]}}}.
+    Строка: [0 заголовок | 1 значение, текст, uz?] или [2, пример zh, перевод ru, uz?]."""
+    readings: OrderedDict[str, OrderedDict[str, str]] = OrderedDict()
+    # тот же порядок чтений, что у карточки (dictionary.py, engine.ts): редакция, обычные,
+    # имена собственные последними — иначе статья 王 достанется фамилии Wáng
+    for e in sorted(rows, key=lambda e: (e.source != "curated",
+                                         e.pinyin_num[:1] != e.pinyin_num[:1].lower(), e.id)):
+        readings.setdefault(e.simplified, OrderedDict()).setdefault(
+            reading_key(e.pinyin_num), word_marks(e.pinyin_num))
+    found = await bkrs.find(session, list(readings))
+    articles: OrderedDict[str, dict] = OrderedDict()
     for head, keys in readings.items():
         e = found.get(head)
         if not e:
@@ -112,6 +132,14 @@ async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
         if len(bkrs.entry_readings(e, items)) > 1:
             gp = {pinyin: bkrs.short_for(e, pinyin) for pinyin in keys.values()}
             art["gp"] = {p: [s] + ([u] if (u := uz(s)) else []) for p, s in gp.items() if s}
+        articles[head] = art
+    return articles
+
+
+async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
+    """data/bkrs/N.json: статьи collect_articles() с узбекскими строками из кэша."""
+    shards: dict[int, dict] = {}
+    for head, art in (await collect_articles(session, rows, await uz_cache(session))).items():
         shards.setdefault(shard_of(head), {})[head] = art
 
     folder = out / "bkrs"

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CacheItem
 from app.services.events import log_event
+from app.text import uzbek
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +63,8 @@ class CachedTranslator:
                 # FallbackTranslator ждёт ответа следующего провайдера по сети
                 await session.commit()
                 raise
+            if tgt == "uz":  # единые o‘ / g‘ / ’ (модель пишет по-разному)
+                result = [uzbek.typographic(x) for x in result]
             for k, value in zip(uniq.keys(), result):
                 cached[k] = value
                 await session.merge(CacheItem(key=k, kind="mt", value={"text": value}))
@@ -123,10 +126,11 @@ class GeminiTranslator(CachedTranslator):
     name = "gemini"
     label = "Google Gemini"
 
-    def __init__(self, api_key: str, model: str, http: httpx.AsyncClient):
+    def __init__(self, api_key: str, model: str, http: httpx.AsyncClient, timeout: float = 20):
         super().__init__(http)
         self.api_key = api_key
         self.model = model
+        self.timeout = timeout  # для больших пакетов (pretranslate_bkrs) — больше
 
     async def _call(self, texts: list[str], src: str, tgt: str) -> list[str]:
         keep = (KEEP_FROM_ZH if src == "zh" else KEEP_OTHER)
@@ -142,7 +146,7 @@ class GeminiTranslator(CachedTranslator):
         }
         try:
             r = await self.http.post(GEMINI_URL.format(model=self.model), json=body,
-                                     headers={"x-goog-api-key": self.api_key}, timeout=20)
+                                     headers={"x-goog-api-key": self.api_key}, timeout=self.timeout)
         except httpx.HTTPError as e:
             raise TranslationUnavailable(f"network: {e.__class__.__name__}") from e
         if r.status_code != 200:
