@@ -8,7 +8,7 @@ import { tg } from "../telegram";
 import type { SearchResult, Source } from "../types";
 
 type Target = "uz" | "ru" | "zh";
-export interface Pending { q: string; source?: string; n: number }
+export interface Pending { q: string; source?: string; target?: string; n: number }
 
 const SOURCES: Source[] = ["auto", "zh", "pinyin", "uz", "ru"];
 
@@ -35,14 +35,14 @@ export function SearchScreen({ pending }: { pending: Pending | null }) {
     if (!targets.includes(tgt)) setTgt(targets[0]);
   }, [src]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const run = useCallback(async (query: string, source?: string) => {
+  const run = useCallback(async (query: string, source?: string, forceTarget?: string) => {
     query = query.trim();
     if (!query) return;
     last.current = { q: query, source };
     setQ(query);
     setStatus("loading");
     inputRef.current?.blur();
-    const target = tgt === "zh" ? undefined : tgt;
+    const target = forceTarget ?? (tgt === "zh" ? undefined : tgt);
     try {
       const r = await api.search(query, source, target);
       setResult(r);
@@ -55,7 +55,9 @@ export function SearchScreen({ pending }: { pending: Pending | null }) {
   }, [tgt, loadHistory]);
 
   useEffect(() => {
-    if (pending) run(pending.q, pending.source);
+    if (!pending) return;
+    if (pending.target === "uz" || pending.target === "ru") { setSrc("auto"); setTgt(pending.target); }
+    run(pending.q, pending.source, pending.target);
   }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Кнопка «Назад» Telegram возвращает к главному экрану поиска.

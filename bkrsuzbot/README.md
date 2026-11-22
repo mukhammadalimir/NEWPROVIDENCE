@@ -214,6 +214,7 @@ alembic upgrade head
 # 3. Данные словаря (один раз; повторный запуск обновляет CC-CEDICT, правки редакции не трогает)
 python -m app.scripts.import_cedict --url https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz
 python -m app.scripts.seed
+python -m app.scripts.import_wikt --file ../webapp/data/wikt.json   # переводы ru/uz из Wiktionary
 
 # 4. Mini App
 cd ../miniapp && npm ci && npm run build && cd ../backend
@@ -246,6 +247,7 @@ docker compose --profile https up -d --build      # db, migrate, api, bot, caddy
 docker compose run --rm api python -m app.scripts.import_cedict \
   --url https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz
 docker compose run --rm api python -m app.scripts.seed
+docker compose run --rm api python -m app.scripts.import_wikt --file data/wikt.json
 docker compose restart bot
 ```
 
@@ -265,7 +267,8 @@ docker compose restart bot
 `https://mukhammadalimir.github.io/NEWPROVIDENCE/bkrsuzbot/webapp/` → это значение `WEBAPP_URL` для бота.
 
 - Словарь (CC-CEDICT + редакционные карточки) загружается в телефон один раз (~4 МБ сжато)
-  и ищется прямо в браузере: иероглифы, пиньинь, узбекский/русский по словарю редакции,
+  и ищется прямо в браузере: иероглифы, пиньинь, узбекский/русский по словарю редакции
+  и Wiktionary,
   разные чтения, словосочетания, примеры, разбор фраз по словам.
 - Избранное, история, повторение и настройки хранятся в **Telegram CloudStorage**
   (отдельно для каждого пользователя, синхронизируются между устройствами).
@@ -282,13 +285,36 @@ git add ../webapp && git commit -m "Update offline Mini App" && git push
 ```
 
 Проверка: `python3 -m http.server 8090` из корня репозитория, затем
-`node bkrsuzbot/e2e/offline-smoke.cjs` (25 проверок на экране iPhone/Android).
+`node bkrsuzbot/e2e/offline-smoke.cjs` (31 проверка на экране iPhone/Android).
+
+### Переводы ru/uz ↔ китайский из Wiktionary
+
+CC-CEDICT — китайско-английский словарь, поэтому русские и узбекские слова без карточки
+редакции раньше не находились. Файл `webapp/data/wikt.json` (~7 000 русских и ~4 400
+узбекских слов) собран из открытых данных Wiktionary (CC BY-SA 4.0, выгрузки
+wiktextract с kaikki.org): берутся переводы одного и того же значения слова на
+русский/узбекский и на путунхуа, остаются только слова, которые есть в CC-CEDICT.
+В выдаче такие значения помечены «Wiktionary · не проверено» (в боте — 🌐).
+Данные БКРС не используются.
+
+Пересборка (нужен доступ к kaikki.org, английский файл — 3,4 ГБ, читается потоком):
+
+```bash
+cd bkrsuzbot/backend
+curl -s https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl \
+  | python -m app.scripts.extract_wiktionary --kind en > /tmp/wikt_en.tsv
+curl -s https://kaikki.org/dictionary/downloads/ru/ru-extract.jsonl.gz | gunzip \
+  | python -m app.scripts.extract_wiktionary --kind ru > /tmp/wikt_ru.tsv
+python -m app.scripts.build_wikt --cedict ../webapp/data/cedict.json \
+  --out ../webapp/data/wikt.json /tmp/wikt_en.tsv /tmp/wikt_ru.tsv
+python -m app.scripts.import_wikt --file ../webapp/data/wikt.json   # для бота/сервера
+```
 
 ---
 
 ## 8. Проверки и как их повторить
 
-### Автотесты (35 шт.)
+### Автотесты (40 шт.)
 
 ```bash
 createdb -O bkrsuz bkrsuz_test

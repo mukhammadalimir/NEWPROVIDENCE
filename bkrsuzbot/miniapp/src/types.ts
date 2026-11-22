@@ -1,6 +1,6 @@
 export type Lang = "uz" | "ru";
 export type Source = "auto" | "zh" | "pinyin" | "uz" | "ru";
-export type Kind = "curated" | "cedict_en" | "mt" | "ai";
+export type Kind = "curated" | "cedict_en" | "wikt" | "mt" | "ai";
 
 export interface Me {
   id: number;

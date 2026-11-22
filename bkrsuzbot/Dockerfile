@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && python -c "import jieba; jieba.initialize()"
 COPY backend/ ./
 COPY --from=web /web/dist /app/miniapp_dist
+COPY webapp/data/wikt.json /app/data/wikt.json
 RUN useradd -m app && mkdir -p /data/audio && chown -R app /data /app
 USER app
 EXPOSE 8000

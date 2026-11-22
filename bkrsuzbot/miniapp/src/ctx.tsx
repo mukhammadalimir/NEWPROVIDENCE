@@ -7,7 +7,7 @@ export interface AppCtx {
   setMe: (m: Me) => void;
   t: T;
   toast: (msg: string) => void;
-  openSearch: (q: string, source?: string) => void;
+  openSearch: (q: string, source?: string, target?: string) => void;
 }
 
 export const Ctx = createContext<AppCtx>(null as unknown as AppCtx);

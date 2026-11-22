@@ -37,7 +37,8 @@ export function Results({ r, onSearchAs }: { r: SearchResult; onSearchAs: (sourc
           <ul className="list">
             {r.candidates!.map((c) => (
               <li key={c.entry_id}>
-                <button className="list-row cand" onClick={() => openSearch(c.headword, "zh")}>
+                <button className="list-row cand" onClick={() => openSearch(c.headword, "zh",
+                  r.source_lang === "ru" || r.source_lang === "uz" ? r.source_lang : r.target_lang)}>
                   <span className="zh big" lang="zh-CN">{c.headword}</span>
                   <span className="py">{c.pinyin}</span>
                   <span className="gl">{c.gloss}<MiniSource kind={c.gloss_kind} /></span>

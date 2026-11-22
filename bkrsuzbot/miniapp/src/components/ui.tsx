@@ -11,6 +11,7 @@ export function SourceBadge({ kind, verified = true }: { kind: Kind; verified?: 
   const map: Record<Kind, TKey> = {
     curated: verified ? "srcCuratedOk" : "srcCurated",
     cedict_en: "srcCedict",
+    wikt: "srcWikt",
     mt: "srcMt",
     ai: "srcAi",
   };
@@ -23,6 +24,7 @@ export function MiniSource({ kind }: { kind: Kind }) {
   const { t } = useApp();
   if (kind === "cedict_en") return <sup className="mini" title={t("srcCedict")}>EN</sup>;
   if (kind === "mt") return <sup className="mini mt" title={t("srcMt")}>MT</sup>;
+  if (kind === "wikt") return <sup className="mini" title={t("srcWikt")}>W</sup>;
   return null;
 }
 
@@ -30,6 +32,7 @@ export function Legend({ kinds }: { kinds: Kind[] }) {
   const { t } = useApp();
   const parts = [];
   if (kinds.includes("cedict_en")) parts.push(`EN — ${t("srcCedict")}`);
+  if (kinds.includes("wikt")) parts.push(`W — ${t("srcWikt")}`);
   if (kinds.includes("mt")) parts.push(`MT — ${t("srcMt")}`);
   return parts.length ? <div className="legend">{parts.join(" · ")}</div> : null;
 }

@@ -65,6 +65,7 @@ const uz = {
   srcCuratedOk: "Tahririyat lug‘ati",
   srcCurated: "Tahririyat · tekshirilmagan",
   srcCedict: "CC-CEDICT · inglizcha",
+  srcWikt: "Wiktionary · tekshirilmagan",
   srcMt: "Mashina tarjimasi",
   srcAi: "AI yaratgan · xato bo‘lishi mumkin",
   mtUsed: "Tarjima mashina yordamida (Google) bajarildi — xato bo‘lishi mumkin.",
@@ -91,7 +92,7 @@ const uz = {
   deleted: "O‘chirildi",
   sources: "Manbalar",
   sourcesText:
-    "Xitoycha so‘zlar va o‘qilishlar: CC-CEDICT (CC BY-SA 4.0, inglizcha). O‘zbekcha/ruscha ma’nolar: tahririyat kartochkalari. Mashina tarjimasi: Google Translate. Talaffuz: Google Text-to-Speech. AI izohlar alohida belgilanadi.",
+    "Xitoycha so‘zlar va o‘qilishlar: CC-CEDICT (CC BY-SA 4.0, inglizcha). O‘zbekcha/ruscha ma’nolar: tahririyat kartochkalari va Wiktionary (CC BY-SA 4.0, tekshirilmagan). Mashina tarjimasi: Google Translate. Talaffuz: Google Text-to-Speech. AI izohlar alohida belgilanadi.",
   services: "Xizmatlar",
   offlineNote:
     "Oflayn rejim: lug‘at telefoningiz ichida ishlaydi, server shart emas. Gaplarni mashina tarjimasi va AI izohlar hozircha faqat botda (server ulanganda) mavjud. Talaffuz — telefoningizdagi xitoycha ovoz.",
@@ -168,6 +169,7 @@ const ru: Dict = {
   srcCuratedOk: "Словарь редакции",
   srcCurated: "Редакция · не проверено",
   srcCedict: "CC-CEDICT · английский",
+  srcWikt: "Wiktionary · не проверено",
   srcMt: "Машинный перевод",
   srcAi: "Создано AI · возможны ошибки",
   mtUsed: "Перевод выполнен машинно (Google) — возможны ошибки.",
@@ -194,7 +196,7 @@ const ru: Dict = {
   deleted: "Удалено",
   sources: "Источники",
   sourcesText:
-    "Китайские слова и чтения: CC-CEDICT (CC BY-SA 4.0, английский). Узбекские/русские значения: карточки редакции. Машинный перевод: Google Translate. Озвучка: Google Text-to-Speech. AI-пояснения помечаются отдельно.",
+    "Китайские слова и чтения: CC-CEDICT (CC BY-SA 4.0, английский). Узбекские/русские значения: карточки редакции и Wiktionary (CC BY-SA 4.0, не проверено). Машинный перевод: Google Translate. Озвучка: Google Text-to-Speech. AI-пояснения помечаются отдельно.",
   services: "Сервисы",
   offlineNote:
     "Автономный режим: словарь работает прямо в телефоне, сервер не нужен. Машинный перевод фраз и AI-пояснения пока доступны только после подключения сервера. Озвучка — китайский голос вашего телефона.",

@@ -32,8 +32,9 @@ def card_text(card: dict, ui: str, lang: str) -> str:
 
         if r["senses"]:
             verified = all(s["verified"] for s in r["senses"])
-            lines.append(f"<b>{t(ui, 'meanings')}</b> — "
-                         f"<i>{t(ui, 'src_curated_ok' if verified else 'src_curated')}</i>")
+            src = ("src_wikt" if all(s["kind"] == "wikt" for s in r["senses"])
+                   else "src_curated_ok" if verified else "src_curated")
+            lines.append(f"<b>{t(ui, 'meanings')}</b> — <i>{t(ui, src)}</i>")
             for i, s in enumerate(r["senses"], 1):
                 pos = f"<i>{e(s['pos'])}</i> " if s.get("pos") else ""
                 lines.append(f"{i}. {pos}{e(', '.join(s['items']))}")
@@ -49,7 +50,7 @@ def card_text(card: dict, ui: str, lang: str) -> str:
         if r["collocations"]:
             lines.append(f"<b>{t(ui, 'colloc')}</b>")
             for c in r["collocations"][:6]:
-                mark = {"mt": " 🤖", "cedict_en": " 📖"}.get(c["gloss_kind"], "")
+                mark = {"mt": " 🤖", "cedict_en": " 📖", "wikt": " 🌐"}.get(c["gloss_kind"], "")
                 gloss = f" — {e(c['gloss'])}{mark}" if c.get("gloss") else ""
                 lines.append(f"• {e(c['zh'])} <i>{e(c['pinyin'])}</i>{gloss}")
         if r["examples"]:
@@ -83,7 +84,7 @@ def text_result(result: dict, ui: str) -> str:
     if tx["words"]:
         lines.append(f"\n<b>{t(ui, 'words')}</b>")
         for w in tx["words"][:12]:
-            mark = " 📖" if w["gloss_kind"] == "cedict_en" else ""
+            mark = {"cedict_en": " 📖", "wikt": " 🌐"}.get(w["gloss_kind"], "")
             lines.append(f"• {e(w['zh'])} <i>{e(w['pinyin'])}</i> — {e(w['gloss'])}{mark}")
     return _trim("\n".join(lines))
 

@@ -2,7 +2,7 @@
 // Данные: data/cedict.json (CC-CEDICT, CC BY-SA 4.0) и data/meta.json (редакционные карточки).
 // Машинного перевода и AI здесь нет — фразы разбираются по словам, это честно помечается.
 
-import type { Candidate, Card, Kind, Reading, SearchResult, Source } from "../types";
+import type { Candidate, Card, Kind, Reading, SearchResult, Sense, Source } from "../types";
 import * as tx from "./text";
 
 interface Entry {
@@ -28,6 +28,9 @@ const byTrad = new Map<string, Entry[]>();
 const byKey = new Map<string, Entry[]>();
 const byToneKey = new Map<string, Entry[]>();
 const gloss = { uz: new Map<string, Entry[]>(), ru: new Map<string, Entry[]>() };
+// Wiktionary (CC BY-SA): слово ru/uz → китайские слова; и обратно для показа значений на карточке
+const wikt = { uz: new Map<string, string[]>(), ru: new Map<string, string[]>() };
+const wiktBack = { uz: new Map<string, [string, number][]>(), ru: new Map<string, [string, number][]>() };
 let loading: Promise<void> | null = null;
 
 const push = <K,>(m: Map<K, Entry[]>, k: K, e: Entry) => {
@@ -38,10 +41,21 @@ const push = <K,>(m: Map<K, Entry[]>, k: K, e: Entry) => {
 export function loadDictionary(base = "./data/"): Promise<void> {
   if (loading) return loading;
   loading = (async () => {
-    const [meta, cedict] = await Promise.all([
+    const [meta, cedict, wk] = await Promise.all([
       fetch(base + "meta.json").then((r) => { if (!r.ok) throw new Error("meta"); return r.json(); }),
       fetch(base + "cedict.json").then((r) => { if (!r.ok) throw new Error("cedict"); return r.json(); }),
+      fetch(base + "wikt.json").then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
+    for (const lang of ["uz", "ru"] as const) {
+      for (const [w, zhs] of Object.entries((wk?.[lang] ?? {}) as Record<string, string>)) {
+        const list = zhs.split("|");
+        wikt[lang].set(w, list);
+        list.forEach((zh, rank) => {
+          const back = wiktBack[lang].get(zh);
+          if (back) back.push([w, rank]); else wiktBack[lang].set(zh, [[w, rank]]);
+        });
+      }
+    }
     tx.setSyllables(meta.syllables);
     const freq = new Map<string, number>();
     (cedict as [string, string, string, string, string, number][]).forEach(([simp, trad, pin, defs, mw, f]) => {
@@ -87,6 +101,13 @@ function group(list: Entry[]): Map<string, Entry[]> {
   return m;
 }
 
+/** Русские/узбекские значения китайского слова по Wiktionary (самые прямые — первыми). */
+function wiktMeanings(head: string, lang: string): string[] {
+  const back = wiktBack[lang as "uz" | "ru"]?.get(head);
+  if (!back) return [];
+  return [...back].sort((a, b) => a[1] - b[1] || a[0].length - b[0].length).slice(0, 5).map(([w]) => w);
+}
+
 const WEAK = /^(old |archaic )?(variant of|surname|used in|see )/i;
 
 function shortGloss(list: Entry[], lang: string): [string, Kind | ""] {
@@ -94,6 +115,8 @@ function shortGloss(list: Entry[], lang: string): [string, Kind | ""] {
     const items = (s as Record<string, string[]>)[lang];
     if (items?.length) return [items.slice(0, 3).join(", "), "curated"];
   }
+  const wm = list.length ? wiktMeanings(list[0].simp, lang) : [];
+  if (wm.length) return [wm.slice(0, 3).join(", "), "wikt"];
   const defs = [...list].sort((a, b) => Number(isProper(a)) - Number(isProper(b))).flatMap((e) => e.senses.flatMap((s) => s.en ?? []));
   const good = defs.filter((d) => !WEAK.test(d));
   const pick = good.length ? good : defs;
@@ -128,6 +151,8 @@ function buildCards(list: Entry[], lang: string): Card[] {
     [...items].sort((a, b) => Number(a.source !== "curated") - Number(b.source !== "curated") || Number(isProper(a)) - Number(isProper(b)) || a.id - b.id)
       .forEach((e) => push(readings, `${e.toneKey}|${isProper(e)}`, e));
     const pool = collocationPool(head);
+    const wm = wiktMeanings(head, lang);
+    const commonReadings = [...readings.keys()].filter((k) => k.endsWith("|false"));
     const out: Reading[] = [];
     for (const [k, rs] of readings) {
       const toneKey = k.split("|")[0];
@@ -142,12 +167,17 @@ function buildCards(list: Entry[], lang: string): Card[] {
         seen.add(c.simp);
         coll.push({ zh: c.simp, pinyin: tx.wordMarks(c.pin), gloss: (c.senses[0].en ?? []).slice(0, 2).join("; "), gloss_kind: "cedict_en" });
       }
+      const senses: Sense[] = curated.flatMap((e) => e.senses.filter((s) => (s as Record<string, string[]>)[lang]?.length).map((s) => ({
+        pos: pos(s.pos, lang), items: (s as Record<string, string[]>)[lang], kind: "curated" as Kind, verified: e.verified })));
+      // Wiktionary не различает чтения — показываем его значения, только если обычное чтение одно
+      if (!senses.length && wm.length && commonReadings.length === 1 && commonReadings[0] === k) {
+        senses.push({ pos: null, items: wm, kind: "wikt", verified: false });
+      }
       out.push({
         entry_id: main.id, key: toneKey, pinyin: tx.wordMarks(main.pin), pinyin_num: main.pin,
         approx: tx.approxUz(main.pin), proper: isProper(main),
         measure_word: [...curated, ...cedict].find((e) => e.mw)?.mw ?? null,
-        senses: curated.flatMap((e) => e.senses.filter((s) => (s as Record<string, string[]>)[lang]?.length).map((s) => ({
-          pos: pos(s.pos, lang), items: (s as Record<string, string[]>)[lang], kind: "curated" as Kind, verified: e.verified }))),
+        senses,
         english: [...cedict, ...curated].flatMap((e) => e.senses.flatMap((s) => s.en ?? [])),
         english_mt: null,
         usage: curated.find((e) => e.usage[lang]) ? { text: curated.find((e) => e.usage[lang])!.usage[lang], kind: "curated" } : null,
@@ -161,7 +191,7 @@ function buildCards(list: Entry[], lang: string): Card[] {
   return cards;
 }
 
-function candidates(groups: Map<string, Entry[]>, lang: string, want?: string): Candidate[] {
+function candidates(groups: Map<string, Entry[]>, lang: string, want?: string, order?: Map<string, number>): Candidate[] {
   const out: (Candidate & { r: [number, number] })[] = [];
   for (const [head, all] of groups) {
     const items = want ? (all.filter((e) => e.key === want).length ? all.filter((e) => e.key === want) : all) : all;
@@ -169,7 +199,7 @@ function candidates(groups: Map<string, Entry[]>, lang: string, want?: string): 
     let py = [...new Set(items.filter((e) => !isProper(e)).map((e) => tx.wordMarks(e.pin)))];
     if (!py.length) py = [...new Set(items.map((e) => tx.wordMarks(e.pin)))];
     out.push({ headword: head, pinyin: py.slice(0, 3).join(", "), gloss: g, gloss_kind: (kind || "cedict_en") as Kind,
-      entry_id: items[0].id, r: [kind === "curated" ? 0 : 1, -Math.max(...items.map((e) => e.freq))] });
+      entry_id: items[0].id, r: order ? [order.get(head) ?? 99, -Math.max(...items.map((e) => e.freq))] : [kind === "curated" ? 0 : 1, -Math.max(...items.map((e) => e.freq))] });
   }
   return out.sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1]).map(({ r: _r, ...c }) => c);
 }
@@ -214,6 +244,12 @@ export async function search(query: string, opts: { userTarget: string; source?:
   let source = opts.source;
   if (!source || !["zh", "pinyin", "uz", "ru"].includes(source)) {
     const d = tx.detect(q);
+    if (!d.lang && d.options.includes("ru") && d.options.includes("uz")) {
+      // Кириллица без узбекских букв: если слово есть только в одном словаре — берём его
+      const inRu = gloss.ru.has(tx.normRu(q)) || wikt.ru.has(tx.normRu(q));
+      const inUz = gloss.uz.has(tx.normUz(q)) || wikt.uz.has(tx.normUz(q));
+      if (inRu !== inUz) { d.lang = inRu ? "ru" : "uz"; d.alternatives = [inRu ? "uz" : "ru"]; }
+    }
     if (!d.lang) return { ...base, type: "choose", options: d.options as Source[] };
     source = d.lang;
     base.alternatives = d.alternatives as Source[];
@@ -259,15 +295,26 @@ export async function search(query: string, opts: { userTarget: string; source?:
     return { ...base, type: "candidates", candidates: candidates(groups, meaningLang, tx.tonelessKey(syls)).slice(0, 20) };
   }
 
-  // Узбекский / русский → китайский (только по словарю редакции)
+  // Узбекский / русский → китайский: словарь редакции + переводы из Wiktionary
   const term = source === "uz" ? tx.normUz(q) : tx.normRu(q);
-  const found = gloss[source as "uz" | "ru"].get(term) ?? [];
-  const groups = group(found);
+  const lg = source as "uz" | "ru";
+  const found = gloss[lg].get(term) ?? [];
+  const order = new Map<string, number>();
+  found.forEach((e) => order.set(e.simp, 0));
+  const wz = wikt[lg].get(term) ?? (lg === "ru" ? [] : wikt.uz.get(term.replace(/'/g, "")) ?? []);
+  wz.forEach((zh, i) => { if (!order.has(zh)) order.set(zh, 1 + i); });
+  const all = [...found];
+  for (const zh of wz) {
+    if (found.some((e) => e.simp === zh)) continue;
+    all.push(...(bySimp.get(zh) ?? []).filter((e) => !isProper(e)));
+  }
+  // Есть карточка редакции — показываем её сразу; иначе — переводы Wiktionary
+  const groups = group(group(found).size === 1 ? found : all);
   if (groups.size === 1) {
     const keys = new Set(found.map((e) => `${e.simp}|${e.toneKey}|${isProper(e)}`));
-    const extra = (bySimp.get(found[0].simp) ?? []).filter((e) => e.source === "cedict" && keys.has(`${e.simp}|${e.toneKey}|${isProper(e)}`));
-    return { ...base, type: "word", cards: buildCards([...found, ...extra], meaningLang) };
+    const extra = found.length ? (bySimp.get(found[0].simp) ?? []).filter((e) => e.source === "cedict" && keys.has(`${e.simp}|${e.toneKey}|${isProper(e)}`)) : [];
+    return { ...base, type: "word", cards: buildCards([...[...groups.values()][0], ...extra], meaningLang) };
   }
-  if (groups.size > 1) return { ...base, type: "candidates", candidates: candidates(groups, meaningLang) };
+  if (groups.size > 1) return { ...base, type: "candidates", candidates: candidates(groups, meaningLang, undefined, order) };
   return { ...base, notices: ["translate_unavailable"] };
 }
