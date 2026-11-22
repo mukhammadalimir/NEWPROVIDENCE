@@ -54,7 +54,10 @@ async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
                  "g": короткое значение (ru), "gu": то же на узбекском, если переведено}}.
     Строка: [0 заголовок | 1 значение, текст, uz?] или [2, пример zh, перевод ru, uz?]."""
     readings: OrderedDict[str, OrderedDict[str, str]] = OrderedDict()
-    for e in sorted(rows, key=lambda e: (e.source != "curated", e.id)):
+    # тот же порядок чтений, что у карточки (dictionary.py, engine.ts): редакция, обычные,
+    # имена собственные последними — иначе статья 王 достанется фамилии Wáng
+    for e in sorted(rows, key=lambda e: (e.source != "curated",
+                                         e.pinyin_num[:1] != e.pinyin_num[:1].lower(), e.id)):
         readings.setdefault(e.simplified, OrderedDict()).setdefault(
             reading_key(e.pinyin_num), word_marks(e.pinyin_num))
     found = await bkrs.find(session, list(readings))
@@ -74,8 +77,8 @@ async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
         e = found.get(head)
         if not e:
             continue
-        items = dsl.parse_body(e.body, dsl.readings_of(e.pinyin))
-        by_pinyin = dsl.assign_readings(items, dsl.readings_of(e.pinyin), list(keys.values()))
+        entry_rd, items = bkrs.parsed(e)
+        by_pinyin = dsl.assign_readings(items, entry_rd, list(keys.values()))
         art: dict = {"r": {}}
         for key, pinyin in keys.items():
             sel = bkrs.select_items(by_pinyin.get(pinyin, []))
@@ -95,8 +98,9 @@ async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
             art["r"][key] = lines
         if not art["r"]:
             continue
+        # порядок всех чтений карточки (как на сервере), а не только тех, где есть строки
         order = [dsl.norm_pinyin(x) for x in bkrs.entry_readings(e, items)]
-        art["o"] = sorted(art["r"], key=lambda k: order.index(dsl.norm_pinyin(keys[k]))
+        art["o"] = sorted(keys, key=lambda k: order.index(dsl.norm_pinyin(keys[k]))
                           if dsl.norm_pinyin(keys[k]) in order else len(order))
         g = bkrs.short(items)
         if g:
@@ -104,6 +108,10 @@ async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
             u = uz(g)
             if u:
                 art["gu"] = u
+        # короткое значение по чтениям (кандидаты «yú», словосочетания) — как short_for()
+        if len(bkrs.entry_readings(e, items)) > 1:
+            gp = {pinyin: bkrs.short_for(e, pinyin) for pinyin in keys.values()}
+            art["gp"] = {p: [s] + ([u] if (u := uz(s)) else []) for p, s in gp.items() if s}
         shards.setdefault(shard_of(head), {})[head] = art
 
     folder = out / "bkrs"

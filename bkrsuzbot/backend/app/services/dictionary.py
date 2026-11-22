@@ -310,8 +310,8 @@ async def attach_bkrs(session: AsyncSession, svc: Services, cards: list[dict],
         e = found.get(card["headword"])
         if not e:
             continue
-        items = dsl.parse_body(e.body, dsl.readings_of(e.pinyin))
-        by = dsl.assign_readings(items, dsl.readings_of(e.pinyin),
+        readings, items = bkrs.parsed(e)
+        by = dsl.assign_readings(items, readings,
                                  [r["pinyin"] for r in card["readings"]])
         for r in card["readings"]:
             sel = bkrs.select_items(by.get(r["pinyin"], []))
@@ -337,7 +337,7 @@ async def attach_bkrs(session: AsyncSession, svc: Services, cards: list[dict],
 async def build_bkrs_cards(session: AsyncSession, svc: Services, entry: BkrsEntry,
                            lang: str) -> tuple[list[dict], list[str]]:
     """Карточка для слова/выражения, которое есть только в БКРС (нет в CC-CEDICT)."""
-    items = dsl.parse_body(entry.body, dsl.readings_of(entry.pinyin))
+    _, items = bkrs.parsed(entry)
     readings = bkrs.entry_readings(entry, items) or [py.text_to_pinyin(entry.headword)]
     card_readings = []
     for rd in readings:

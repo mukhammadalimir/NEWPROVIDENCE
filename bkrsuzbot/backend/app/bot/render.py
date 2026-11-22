@@ -15,8 +15,11 @@ def bkrs_lines(items: list[dict]) -> list[str]:
         if it["kind"] == "head":
             out.append(f"<i>{e(it['text'])}</i>")
         elif it["kind"] == "ex":
+            if not it.get("zh"):  # пример без иероглифов — просто текст, один раз
+                out.append(f"    ▫️ <i>{e(it.get('tr') or it['text'])}</i>")
+                continue
             tr = f" — <i>{e(it['tr'])}</i>" if it.get("tr") else ""
-            out.append(f"    ▫️ {e(it['zh'] or it['text'])}{tr}")
+            out.append(f"    ▫️ {e(it['zh'])}{tr}")
         else:
             out.append(e(it["text"]))
     return out

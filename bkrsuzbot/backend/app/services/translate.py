@@ -58,6 +58,9 @@ class CachedTranslator:
                 result = await self._call(list(uniq.values()), src, tgt)
             except TranslationUnavailable as e:
                 await log_event(session, "translate", False, f"{self.name}: {e}")
+                # сразу фиксируем: иначе в SQLite блокировка записи держится, пока
+                # FallbackTranslator ждёт ответа следующего провайдера по сети
+                await session.commit()
                 raise
             for k, value in zip(uniq.keys(), result):
                 cached[k] = value

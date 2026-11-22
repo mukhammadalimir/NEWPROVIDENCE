@@ -38,7 +38,8 @@ let dataBase = "./data/";
 // часть скачивается, только когда нужна (см. backend/app/scripts/export_offline.py).
 // Строка: [0 заголовок | 1 значение, текст ru, uz?] или [2, пример zh, перевод ru, uz?].
 type BkrsLine = [0 | 1, string, string?] | [2, string, string, string?];
-interface BkrsArticle { r: Record<string, BkrsLine[]>; o: string[]; g?: string; gu?: string }
+// g/gu — короткое значение статьи (ru/uz); gp — по чтениям, если их несколько: {пиньинь: [ru, uz?]}
+interface BkrsArticle { r: Record<string, BkrsLine[]>; o: string[]; g?: string; gu?: string; gp?: Record<string, [string, string?]> }
 let bkrsShards = 0;
 const shardCache = new Map<number, Promise<Record<string, BkrsArticle>>>();
 
@@ -56,8 +57,12 @@ async function bkrsArticles(heads: Iterable<string>): Promise<Map<string, BkrsAr
   const parts = new Set(uniq.map((h) => bkrsShard(h, bkrsShards)));
   await Promise.all([...parts].map((n) => {
     if (!shardCache.has(n)) {
-      const p = fetch(`${dataBase}bkrs/${n}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => {
-        shardCache.delete(n); // сеть пропала — попробуем в следующий раз
+      const p = fetch(`${dataBase}bkrs/${n}.json`).then((r) => {
+        if (r.ok) return r.json();
+        if (r.status === 404) return {}; // такой части нет — запоминаем
+        throw new Error(String(r.status));
+      }).catch(() => {
+        shardCache.delete(n); // сеть пропала или сервер ответил ошибкой — попробуем в следующий раз
         return {};
       });
       shardCache.set(n, p);
@@ -74,12 +79,20 @@ async function bkrsArticles(heads: Iterable<string>): Promise<Map<string, BkrsAr
 /** Короткое значение БКРС для списков (как apply_short_glosses на сервере):
  *  ru — как в словаре; uz — значение редакции не трогаем, иначе перевод БКРС, а если его
  *  нет — русский БКРС вместо английского CC-CEDICT (узбекский Wiktionary оставляем). */
-function bkrsGloss(a: BkrsArticle | undefined, lang: string, current: Kind): [string, Kind] | null {
+function bkrsGloss(a: BkrsArticle | undefined, lang: string, current: Kind, pinyin?: string): [string, Kind] | null {
   if (!a?.g) return null;
-  if (lang === "ru") return [a.g, "bkrs"];
+  let ru = a.g;
+  let uz = a.gu;
+  if (a.gp && pinyin) {
+    // у слова несколько чтений — значение именно показанного чтения (как short_for на сервере)
+    const v = a.gp[pinyin.split(",")[0].trim()];
+    if (!v) return null;
+    [ru, uz] = v;
+  }
+  if (lang === "ru") return [ru, "bkrs"];
   if (lang !== "uz" || current === "curated") return null;
-  if (a.gu) return [a.gu, "bkrs_mt"];
-  return current === "cedict_en" ? [a.g, "bkrs"] : null;
+  if (uz) return [uz, "bkrs_mt"];
+  return current === "cedict_en" ? [ru, "bkrs"] : null;
 }
 
 const push =<K,>(m: Map<K, Entry[]>, k: K, e: Entry) => {
@@ -206,7 +219,7 @@ async function attachBkrs(cards: Card[], lang: string) {
     const art = arts.get(card.headword);
     for (const r of card.readings) {
       for (const c of r.collocations) {
-        const g = c.gloss_kind === "cedict_en" ? bkrsGloss(arts.get(c.zh), lang, c.gloss_kind) : null;
+        const g = c.gloss_kind === "cedict_en" ? bkrsGloss(arts.get(c.zh), lang, c.gloss_kind, c.pinyin) : null;
         if (g) [c.gloss, c.gloss_kind] = g;
       }
       const lines = art?.r[`${r.key}|${r.proper}`];
@@ -228,12 +241,12 @@ async function attachBkrs(cards: Card[], lang: string) {
 }
 
 /** Короткие значения БКРС для списков (разбор фразы — по zh, кандидаты — по headword). */
-async function withBkrsGloss<T extends { gloss: string; gloss_kind: Kind; zh?: string; headword?: string }>(
+async function withBkrsGloss<T extends { gloss: string; gloss_kind: Kind; pinyin: string; zh?: string; headword?: string }>(
   rows: T[], lang: string): Promise<T[]> {
   const key = (r: T) => r.zh ?? r.headword ?? "";
   const arts = await bkrsArticles(rows.map(key));
   for (const r of rows) {
-    const g = bkrsGloss(arts.get(key(r)), lang, r.gloss_kind);
+    const g = bkrsGloss(arts.get(key(r)), lang, r.gloss_kind, r.pinyin);
     if (g) [r.gloss, r.gloss_kind] = g;
   }
   return rows;

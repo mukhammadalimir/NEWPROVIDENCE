@@ -81,9 +81,10 @@ def test_parse_dsl_skips_header_and_keeps_pinyin():
 def test_parse_body_readings_examples_headings():
     body = list(parse_dsl(SAMPLE.splitlines()))[1][2]
     items = dsl.parse_body(body)
+    # заголовок раздела относится к чтению своих строк («сущ.» — к háng, а не к xíng)
     assert [(i["kind"], i["reading"]) for i in items] == [
-        ("head", None), ("sense", "xíng"), ("ex", "xíng"), ("sense", "xíng"),
-        ("head", "xíng"), ("sense", "háng"), ("ex", "háng")]
+        ("head", "xíng"), ("sense", "xíng"), ("ex", "xíng"), ("sense", "xíng"),
+        ("head", "háng"), ("sense", "háng"), ("ex", "háng")]
     sense = items[1]
     assert sense["text"] == "1) идти, ходить"  # чтение из текста убрано — оно в заголовке
     assert items[5]["text"] == "1) ряд, строка [текста]"  # \[ \] — буквальные скобки
@@ -94,9 +95,10 @@ def test_parse_body_readings_examples_headings():
 
 
 def test_headings_are_not_meanings():
-    for h in ["I", "I сущ.", "гл. А", "собств. и усл.", "Б"]:
+    for h in ["I", "I сущ.", "гл. А", "собств. и усл.", "Б", "I прил. /наречие",
+              "II счётное слово", "I союзное наречие"]:
         assert dsl.is_heading(h), h
-    for m in ["он", "рыба", "II счётное слово", "1) рыба"]:
+    for m in ["он", "рыба", "1) рыба", "II 1) рыба"]:
         assert not dsl.is_heading(m), m
 
 
@@ -267,3 +269,94 @@ async def test_uz_lists_keep_curated_and_replace_english(session, make_services)
     r = rows()
     await apply_short_glosses(session, make_services(google_api_key=""), r, "ru")
     assert [x["gloss_kind"] for x in r] == ["bkrs", "bkrs", "bkrs"]
+
+
+
+# ---- случаи из проверки на реальных статьях БКРС ----
+
+def test_text_outside_blocks_and_separator():
+    # 收到: «получить[m1]-----[/m]вас понял…» — раньше значением был «-----»
+    items = dsl.parse_body("получить[m1]-----[/m]вас понял, информацию принял ([i]в радиообмене[/i])")
+    assert [i["text"] for i in items] == ["получить", "вас понял, информацию принял (в радиообмене)"]
+    from app.services.bkrs import short
+    assert short(items) == "получить"
+
+
+def test_roman_heading_with_unmarked_pos_is_not_the_gloss():
+    from app.services.bkrs import short
+    body = "[m1][b]I[/b] [c][i]прил. /наречие[/i][/c][/m][m2]1) большой, крупный[/m]"
+    items = dsl.parse_body(body)
+    assert [i["kind"] for i in items] == ["head", "sense"]
+    assert short(items) == "большой, крупный"
+
+
+def test_roman_comma_reading_markers():
+    # 差: «[b]I, chà[/b] … [b]II, chā[/b]»
+    body = ("[m1][b]I, chà[/b] [p]гл.[/p][/m][m2]1) не хватать[/m]"
+            "[m1][b]II, chā[/b][/m][m2]1) разница[/m]")
+    items = dsl.parse_body(body, ["chā", "chà"])
+    assert [(i["kind"], i["reading"], i["text"]) for i in items] == [
+        ("head", "chà", "I гл."), ("sense", "chà", "1) не хватать"),
+        ("head", "chā", "II"), ("sense", "chā", "1) разница")]
+    by = dsl.assign_readings(items, ["chā", "chà"], ["chā", "chà"])
+    assert [i["text"] for i in by["chà"] if i["kind"] == "sense"] == ["1) не хватать"]
+
+
+def test_sense_reading_does_not_leak_to_next_sense():
+    # чтение внутри значения действует только на это значение и его примеры
+    body = ("[m1][p]гл.[/p][/m][m2]1) [b]hàng[/b] ряд[/m][m3][ex]行列 ряды[/ex][/m]"
+            "[m2]2) годиться[/m]")
+    items = dsl.parse_body(body, ["xíng", "hàng"])
+    assert [(i["kind"], i["reading"]) for i in items] == [
+        ("head", "hàng"), ("sense", "hàng"), ("ex", "hàng"), ("sense", None)]
+
+
+def test_reading_marker_with_separator_removed_from_text():
+    items = dsl.parse_body("[m1]1) [b]nà[/b], (также 那一) указательное: тот[/m]", ["nà", "nǎ"])
+    assert items[0]["text"] == "1) (также 那一) указательное: тот" and items[0]["reading"] == "nà"
+
+
+def test_proverb_pinyin_is_one_reading():
+    assert dsl.readings_of("bù rù hǔxué, yān dé hǔzǐ", "不入虎穴，焉得虎子") == [
+        "bù rù hǔxué, yān dé hǔzǐ"]
+    assert dsl.readings_of("dǎ, dá", "打") == ["dǎ", "dá"]
+
+
+def test_split_example_digits_and_punctuation():
+    assert dsl.split_example("东西约600米 с востока") == ("东西约600米", "с востока")
+    assert dsl.split_example("是不是有点意思? Интересно, не так ли?") == (
+        "是不是有点意思?", "Интересно, не так ли?")
+    assert dsl.split_example("打电话 позвонить") == ("打电话", "позвонить")
+    assert dsl.split_example("SMS 短信 2G сеть") == ("SMS 短信", "2G сеть")
+    assert dsl.split_example("только русский текст") == ("", "только русский текст")
+
+
+def test_tags_with_attributes_are_removed():
+    items = dsl.parse_body("[m1][c brown]разг.[/c] [c green]книжн.[/c] врач[/m]")
+    assert items[0]["text"] == "разг. книжн. врач"
+
+
+def test_surname_reading_does_not_take_the_article():
+    assert dsl.match_reading("wáng", ["Wáng", "wáng"]) == "wáng"
+    assert dsl.match_reading("Wáng", ["Wáng", "wáng"]) == "Wáng"
+    by = dsl.assign_readings(dsl.parse_body("[m1]1) князь[/m]"), ["wáng"], ["Wáng", "wáng"])
+    assert list(by) == ["wáng"]
+
+
+def test_export_puts_proper_readings_last():
+    from app.models import DictEntry
+    from app.scripts.export_offline import reading_key
+    rows = [DictEntry(id=1, source="cedict", simplified="王", pinyin_num="Wang2"),
+            DictEntry(id=2, source="cedict", simplified="王", pinyin_num="wang2")]
+    ordered = sorted(rows, key=lambda e: (e.source != "curated",
+                                          e.pinyin_num[:1] != e.pinyin_num[:1].lower(), e.id))
+    assert [reading_key(e.pinyin_num) for e in ordered] == ["wang2|false", "wang2|true"]
+
+
+async def test_short_gloss_of_the_shown_reading(session):
+    from app.services.bkrs import find, short_for
+    e = (await find(session, ["行"]))["行"]
+    assert short_for(e, "háng").startswith("ряд, строка")
+    assert short_for(e, "xíng").startswith("идти, ходить")
+    assert short_for(e, "hèng") == ""  # такого чтения в статье нет — не подменяем
+    assert short_for(e).startswith("идти, ходить")

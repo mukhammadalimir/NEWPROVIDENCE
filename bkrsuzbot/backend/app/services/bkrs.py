@@ -86,26 +86,45 @@ def short(items: list[dict], key: str = "text") -> str:
 
 def marks_to_numbered(reading: str) -> str:
     """«dǎ» → «da3», «mǎmǎhūhū» → «ma3 ma3 hu1 hu1» (для приблизительного звучания)."""
-    syls = py.parse(reading)
+    syls = py.parse(re.sub(r"[,，;]", " ", reading))
     if not syls:
         return ""
     return " ".join(f"{s.text.replace('v', 'u:')}{s.tone or 5}" for s in syls)
 
 
+def parsed(entry: BkrsEntry) -> tuple[list[str], list[dict]]:
+    """(чтения из строки пиньиня, строки статьи) — единая точка разбора статьи."""
+    readings = dsl.readings_of(entry.pinyin, entry.headword)
+    return readings, dsl.parse_body(entry.body, readings)
+
+
 def entry_readings(entry: BkrsEntry, items: list[dict]) -> list[str]:
-    """Чтения статьи: из строки пиньиня, иначе из разметки [b]…[/b]."""
+    """Чтения статьи по порядку: сначала строка пиньиня (её порядок — как на сайте:
+    那 nà раньше nǎ), затем размеченные в тексте чтения, которых там нет ([b]dōngxi[/b]
+    при строке «dōngxī, dongxi»). Чтение без тонов, повторяющее найденное, пропускаем."""
     seen, out = set(), []
-    # Сначала размеченные чтения ([b]dōngxi[/b]), затем строка пиньиня («dōngxī, dongxi»);
-    # чтение без тонов, повторяющее уже найденное, пропускаем.
-    for r in [it["reading"] for it in items if it["reading"]] + dsl.readings_of(entry.pinyin):
+    for r in dsl.readings_of(entry.pinyin, entry.headword) + [
+            it["reading"] for it in items if it["reading"]]:
         k = dsl.norm_pinyin(r)
-        if not dsl.is_reading(r) or k in seen:
+        if not dsl.is_reading(re.sub(r"[,，;]", " ", r)) or k in seen:
             continue
         if k == dsl.strip_tones(r) and any(dsl.strip_tones(x) == k for x in out):
             continue
         seen.add(k)
         out.append(r)
     return out
+
+
+def short_for(entry: BkrsEntry, pinyin: str | None = None) -> str:
+    """Короткое значение статьи; если задано чтение и в статье их несколько — значение
+    именно этого чтения ("" — если такого чтения в статье нет)."""
+    readings, items = parsed(entry)
+    own = entry_readings(entry, items)
+    if not pinyin or len(own) <= 1:
+        return short(items)
+    by = dsl.assign_readings(items, readings, own)  # строки по чтениям самой статьи
+    key = dsl.match_reading(pinyin.split(",")[0].strip(), list(by))
+    return short(by[key]) if key else ""
 
 
 async def translate_items(session: AsyncSession, svc: Services, groups: list[list[dict]],
@@ -155,11 +174,13 @@ async def apply_short_glosses(session: AsyncSession, svc: Services, rows: list[d
     if lang == "uz":
         rows = [r for r in rows if r.get("gloss_kind") != "curated"]
     entries = await find(session, (r[key] for r in rows))
-    glosses = {}
-    for h, e in entries.items():
-        g = short(dsl.parse_body(e.body, dsl.readings_of(e.pinyin)))
+    # значение того чтения, что показано в строке (кандидат «yú», словосочетание и т.п.)
+    glosses: dict[int, str] = {}
+    for i, r in enumerate(rows):
+        e = entries.get(r[key])
+        g = short_for(e, r.get("pinyin")) if e else ""
         if g:
-            glosses[h] = g
+            glosses[i] = g
     if not glosses:
         return
     if lang == "uz":
@@ -170,8 +191,8 @@ async def apply_short_glosses(session: AsyncSession, svc: Services, rows: list[d
                 done = dict(zip(uniq, await svc.translator.translate(session, uniq, "ru", "uz")))
             except TranslationUnavailable:
                 done = {}
-        for r in rows:
-            g = glosses.get(r[key])
+        for i, r in enumerate(rows):
+            g = glosses.get(i)
             if not g:
                 continue
             if g in done:
@@ -179,6 +200,6 @@ async def apply_short_glosses(session: AsyncSession, svc: Services, rows: list[d
             elif r.get("gloss_kind") in ("cedict_en", "", "_bkrs_only"):
                 r["gloss"], r["gloss_kind"] = g, "bkrs"
         return
-    for r in rows:
-        if r[key] in glosses:
-            r["gloss"], r["gloss_kind"] = glosses[r[key]], "bkrs"
+    for i, r in enumerate(rows):
+        if i in glosses:
+            r["gloss"], r["gloss_kind"] = glosses[i], "bkrs"

@@ -216,10 +216,12 @@ function BkrsList({ items }: { items: BkrsItem[] }) {
       {items.map((it, i) =>
         it.kind === "head" ? <div key={i} className="bk-head">{it.text}</div>
         : it.kind === "ex" ? (
-          <div key={i} className="bk-ex">
-            <span lang="zh-CN">{it.zh || it.text}</span>
-            {it.tr && <span className="bk-tr"> — {it.tr}</span>}
-          </div>
+          it.zh ? (
+            <div key={i} className="bk-ex">
+              <span lang="zh-CN">{it.zh}</span>
+              {it.tr && <span className="bk-tr"> — {it.tr}</span>}
+            </div>
+          ) : <div key={i} className="bk-ex bk-tr">{it.tr || it.text}</div>
         ) : <div key={i} className="bk-sense">{it.text}</div>)}
     </div>
   );

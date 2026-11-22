@@ -39,7 +39,9 @@ Server, domen va pullik kalitlar kerak emas. Bot Windows kompyuteringizda ishlay
 - edge-tts rasmiy bo'lmagan xizmat: Microsoft uni o'zgartirsa, ovoz ishlamay qolishi mumkin
   (`pip install -U edge-tts` odatda yordam beradi).
 - bkrs.info lug'ati (~90 MB) birinchi ishga tushirishda bir marta yuklanadi. Yangilash uchun
-  `backend\.bkrs_imported` faylini o'chirib, `.bat` ni qayta oching. Baza ~420 MB joy egallaydi.
+  avval ishlab turgan bot oynasini yoping (yangilash bir necha daqiqa bazaga yozadi va shu
+  vaqtda boshqa bot nusxasi bazaga yoza olmaydi), so'ng `backend\.bkrs_imported` faylini
+  o'chirib, `.bat` ni qayta oching. Baza ~420 MB joy egallaydi.
 - Zaxira nusxa: `backend\bkrsuz.db` faylini nusxalab qo'ying (sevimlilar, tarix, redaksiya o'zgarishlari).
 - Mini App serversiz rejimda ishlaydi: qidiruv telefonda bo'ladi, sevimlilar Telegram CloudStorage'da saqlanadi.
   Unda ham bkrs.info ma'nolari bor: telefon faqat ochilgan so'zning bo'lagini yuklaydi. O'zbekcha

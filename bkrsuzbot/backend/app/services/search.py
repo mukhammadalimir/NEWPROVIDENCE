@@ -21,6 +21,7 @@ from app.services.container import Services
 from app.services.events import log_event
 from app.services.translate import TranslationUnavailable
 from app.text import detect as det
+from app.text import dsl
 from app.text import pinyin as py
 from app.text import uzbek
 
@@ -210,9 +211,16 @@ async def _word_breakdown(session, svc, words: list[str], lang: str) -> list[dic
             gloss, kind = dic.short_gloss(entries, lang, wikt)
             common = [e for e in entries if not e.pinyin_num[:1].isupper()] or entries
             pinyin = py.word_marks(common[0].pinyin_num)
+            if w in in_bkrs and len({e.pinyin_num.lower() for e in common}) > 1:
+                # несколько чтений: берём первое по БКРС (大夫 dàifu «врач», а не dàfū)
+                e_bk = in_bkrs[w]
+                first = next(iter(bkrs.entry_readings(e_bk, bkrs.parsed(e_bk)[1])), None)
+                marks = [py.word_marks(e.pinyin_num) for e in common]
+                pinyin = dsl.match_reading(first, marks) or pinyin
         elif w in in_bkrs:
             gloss, kind = "", "_bkrs_only"  # значение подставит apply_short_glosses
-            pinyin = in_bkrs[w].pinyin.split(",")[0].strip() or py.text_to_pinyin(w)
+            rds = bkrs.entry_readings(in_bkrs[w], bkrs.parsed(in_bkrs[w])[1])
+            pinyin = rds[0] if rds else py.text_to_pinyin(w)
         else:
             continue
         out.append({"zh": w, "pinyin": pinyin, "gloss": gloss, "gloss_kind": kind})
