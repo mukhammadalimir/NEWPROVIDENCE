@@ -41,9 +41,6 @@ type BkrsLine = [0 | 1, string, string?] | [2, string, string, string?];
 // g/gu — короткое значение статьи (ru/uz); gp — по чтениям, если их несколько: {пиньинь: [ru, uz?]}
 interface BkrsArticle { r: Record<string, BkrsLine[]>; o: string[]; g?: string; gu?: string; gp?: Record<string, [string, string?]> }
 let bkrsShards = 0;
-let dataVersion = "";
-const verQuery = (meta: { version?: unknown }) =>
-  (typeof meta?.version === "string" && meta.version ? `?v=${encodeURIComponent(meta.version)}` : "");
 const shardCache = new Map<number, Promise<Record<string, BkrsArticle>>>();
 
 /** Тот же хэш, что shard_of() в export_offline.py. */
@@ -60,7 +57,7 @@ async function bkrsArticles(heads: Iterable<string>): Promise<Map<string, BkrsAr
   const parts = new Set(uniq.map((h) => bkrsShard(h, bkrsShards)));
   await Promise.all([...parts].map((n) => {
     if (!shardCache.has(n)) {
-      const p = fetch(`${dataBase}bkrs/${n}.json${verQuery({ version: dataVersion })}`).then((r) => {
+      const p = fetch(`${dataBase}bkrs/${n}.json`).then((r) => {
         if (r.ok) return r.json();
         if (r.status === 404) return {}; // такой части нет — запоминаем
         throw new Error(String(r.status));
@@ -107,13 +104,9 @@ export function loadDictionary(base = "./data/"): Promise<void> {
   if (loading) return loading;
   dataBase = base;
   loading = (async () => {
-    // meta.json — всегда свежий (без кэша): в нём версия данных; остальные файлы — с ?v=версия,
-    // иначе после обновления на GitHub Pages телефон до 10 минут показывает старые данные
-    const metaPromise = fetch(base + "meta.json", { cache: "no-cache" })
-      .then((r) => { if (!r.ok) throw new Error("meta"); return r.json(); });
     const [meta, cedict, wk] = await Promise.all([
-      metaPromise,
-      metaPromise.then((m) => fetch(`${base}cedict.json${verQuery(m)}`)).then((r) => { if (!r.ok) throw new Error("cedict"); return r.json(); }),
+      fetch(base + "meta.json").then((r) => { if (!r.ok) throw new Error("meta"); return r.json(); }),
+      fetch(base + "cedict.json").then((r) => { if (!r.ok) throw new Error("cedict"); return r.json(); }),
       fetch(base + "wikt.json").then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     for (const lang of ["uz", "ru"] as const) {
@@ -128,7 +121,6 @@ export function loadDictionary(base = "./data/"): Promise<void> {
     }
     tx.setSyllables(meta.syllables);
     bkrsShards = Number(meta.bkrs?.shards) || 0;
-    dataVersion = typeof meta.version === "string" ? meta.version : "";
     const freq = new Map<string, number>();
     (cedict as [string, string, string, string, string, number][]).forEach(([simp, trad, pin, defs, mw, f]) => {
       const [toneKey, key] = tx.keysFromNumbered(pin);

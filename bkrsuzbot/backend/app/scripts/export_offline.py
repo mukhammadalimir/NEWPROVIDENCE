@@ -145,12 +145,10 @@ async def export_bkrs(session, rows: list[DictEntry], out: Path) -> int:
     folder = out / "bkrs"
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir(parents=True)
-    digest = hashlib.sha1()
-    for n, data in sorted(shards.items()):
-        text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-        (folder / f"{n}.json").write_text(text, "utf-8")
-        digest.update(text.encode())
-    return sum(len(d) for d in shards.values()), digest.hexdigest()
+    for n, data in shards.items():
+        (folder / f"{n}.json").write_text(
+            json.dumps(data, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    return sum(len(d) for d in shards.values())
 
 
 async def main() -> None:
@@ -160,7 +158,7 @@ async def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     async with SessionLocal() as s:
         rows = (await s.scalars(select(DictEntry).order_by(DictEntry.id))).all()
-        n_bkrs, bkrs_digest = await export_bkrs(s, list(rows), out)
+        n_bkrs = await export_bkrs(s, list(rows), out)
     cedict = [[e.simplified, "" if e.traditional == e.simplified else e.traditional, e.pinyin_num,
                "/".join(e.senses[0].get("en", [])) if e.senses else "", e.measure_word or "", e.freq]
               for e in rows if e.source == "cedict"]
@@ -169,14 +167,8 @@ async def main() -> None:
                 "collocations": e.collocations, "examples": e.examples, "verified": e.verified}
                for e in rows if e.source == "curated"]
     dump = lambda o: json.dumps(o, ensure_ascii=False, separators=(",", ":"))  # noqa: E731
-    cedict_text = dump(cedict)
-    (out / "cedict.json").write_text(cedict_text, "utf-8")
-    # версия данных: меняется только когда меняются сами данные. Mini App запрашивает
-    # meta.json без кэша, а остальные файлы — с ?v=версия, поэтому после обновления на
-    # GitHub Pages телефон не показывает старую копию (Pages разрешает кэш на 10 минут).
-    version = hashlib.sha1((bkrs_digest + cedict_text).encode()).hexdigest()[:12]
+    (out / "cedict.json").write_text(dump(cedict), "utf-8")
     (out / "meta.json").write_text(dump({
-        "version": version,
         "syllables": sorted(syllables()), "curated": curated,
         "bkrs": {"shards": BKRS_SHARDS, "entries": n_bkrs} if n_bkrs else None,
         "license": "CC-CEDICT: CC BY-SA 4.0, https://cc-cedict.org; 大БКРС: https://bkrs.info"}),
