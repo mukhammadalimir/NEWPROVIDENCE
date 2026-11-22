@@ -39,7 +39,9 @@ async def main() -> None:
         "license": "CC-CEDICT: CC BY-SA 4.0, https://cc-cedict.org"}), "utf-8")
     (out / "README.txt").write_text(
         "cedict.json: CC-CEDICT, Creative Commons Attribution-ShareAlike 4.0, https://cc-cedict.org\n"
-        "meta.json: BKRSUZ editorial cards (uz/ru).\n", "utf-8")
+        "meta.json: BKRSUZ editorial cards (uz/ru).\n"
+        "wikt.json: ru/uz <-> zh translations from Wiktionary (en.wiktionary.org, ru.wiktionary.org),\n"
+        "  CC BY-SA 4.0, extracted with wiktextract (kaikki.org); not reviewed by the editors.\n", "utf-8")
     print(f"cedict: {len(cedict)}, curated: {len(curated)} → {out}")
 
 

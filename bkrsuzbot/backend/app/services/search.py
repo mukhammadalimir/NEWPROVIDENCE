@@ -45,6 +45,12 @@ async def search(session: AsyncSession, svc: Services, query: str, *, user_targe
 
     if source not in det.SOURCES:
         d = det.detect(query)
+        if d.lang is None and set(d.options) >= {"ru", "uz"} and len(query.split()) <= WORD_MAX_WORDS:
+            # Кириллица без узбекских букв: если слово есть только в одном словаре — берём его.
+            hits = [lg for lg in ("ru", "uz") if await dic.find_by_gloss(session, lg, query)]
+            if len(hits) == 1:
+                other = "uz" if hits[0] == "ru" else "ru"
+                d = det.Detection(hits[0], [], [other])
         if d.lang is None:
             await log_event(session, "search", True, "choose")
             await session.commit()
@@ -88,24 +94,26 @@ async def _search_pinyin(session, svc, query, lang, avail, base) -> dict:
     if len(groups) == 1:
         cards, notices = await dic.build_cards(session, svc, entries, lang, avail)
         return {**base, "type": "word", "cards": cards, "notices": notices}
+    wikt = await dic.wikt_meanings(session, lang, list(groups)[:MAX_CANDIDATES * 3])
     return {**base, "type": "candidates",
-            "candidates": _candidates(groups, lang, syls)[:MAX_CANDIDATES]}
+            "candidates": _candidates(groups, lang, syls, wikt)[:MAX_CANDIDATES]}
 
 
-def _candidates(groups, lang, syls=None) -> list[dict]:
+def _candidates(groups, lang, syls=None, wikt=None, order=None) -> list[dict]:
     out = []
     for headword, items in groups.items():
         # Для поиска по пиньиню показываем только подходящие чтения.
         if syls:
             want = py.toneless_key(syls)
             items = [e for e in items if e.pinyin_key == want] or items
-        gloss, kind = dic.short_gloss(items, lang)
+        gloss, kind = dic.short_gloss(items, lang, wikt)
         pinyins = list(dict.fromkeys(py.word_marks(e.pinyin_num) for e in items
                                      if not e.pinyin_num[:1].isupper()))
         pinyins = pinyins or list(dict.fromkeys(py.word_marks(e.pinyin_num) for e in items))
         out.append({"headword": headword, "pinyin": ", ".join(pinyins[:3]),
                     "gloss": gloss, "gloss_kind": kind, "entry_id": items[0].id,
-                    "_rank": (kind != "curated", -max(e.freq for e in items))})
+                    "_rank": (order.get(headword, 99) if order else int(kind != "curated"),
+                              -max(e.freq for e in items))})
     out.sort(key=lambda c: c.pop("_rank"))
     return out
 
@@ -121,7 +129,11 @@ async def _search_word_lang(session, svc, query, source, user_target, avail, bas
             cards, notices = await dic.build_cards(session, svc, entries, source, avail)
             return {**base, "type": "word", "cards": cards, "notices": notices}
         if len(groups) > 1:
-            return {**base, "type": "candidates", "candidates": _candidates(groups, source)}
+            wikt = await dic.wikt_meanings(session, source, list(groups))
+            order = {h: (0 if any(e.source == "curated" for e in g) else 1 + i)
+                     for i, (h, g) in enumerate(groups.items())}
+            return {**base, "type": "candidates",
+                    "candidates": _candidates(groups, source, wikt=wikt, order=order)[:MAX_CANDIDATES]}
 
     if not avail["translate"]:
         return {**base, "type": "not_found", "notices": ["translate_unavailable"]}
@@ -171,6 +183,7 @@ def _segment(zh: str) -> list[str]:
 async def _word_breakdown(session, words: list[str], lang: str) -> list[dict]:
     """Разбор китайского текста по словам (со словарными значениями)."""
     out, seen = [], set()
+    wikt = await dic.wikt_meanings(session, lang, [w for w in words if dic._has_han(w)])
     for w in words:
         if w in seen or not dic._has_han(w):
             continue
@@ -178,7 +191,7 @@ async def _word_breakdown(session, words: list[str], lang: str) -> list[dict]:
         entries: list[DictEntry] = await dic.find_by_headword(session, w)
         if not entries:
             continue
-        gloss, kind = dic.short_gloss(entries, lang)
+        gloss, kind = dic.short_gloss(entries, lang, wikt)
         out.append({"zh": w, "pinyin": py.word_marks(entries[0].pinyin_num),
                     "gloss": gloss, "gloss_kind": kind})
         if len(out) >= 15:

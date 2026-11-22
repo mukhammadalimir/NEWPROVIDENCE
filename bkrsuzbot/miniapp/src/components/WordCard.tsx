@@ -115,7 +115,7 @@ function ReadingBlock({ r, card, lang, multi }: { r: Reading; card: Card; lang: 
 
       {r.senses.length > 0 && (
         <div className="block">
-          <div className="block-title">{t("meanings")} <SourceBadge kind="curated" verified={verified} /></div>
+          <div className="block-title">{t("meanings")} <SourceBadge kind={r.senses.every((s) => s.kind === "wikt") ? "wikt" : "curated"} verified={verified} /></div>
           <ol className="senses">
             {r.senses.map((s, i) => (
               <li key={i}>{s.pos && <em>{s.pos}</em>} {s.items.join(", ")}</li>

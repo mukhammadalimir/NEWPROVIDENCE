@@ -165,7 +165,7 @@ export function normUz(text: string): string {
   if (/[а-яА-ЯёЁўқғҳЎҚҒҲ]/.test(text)) text = cyrToLat(text);
   return text.toLowerCase().replace(APOS, "'").replace(/\s+/g, " ").replace(/^[ .,!?;:]+|[ .,!?;:]+$/g, "");
 }
-export const normRu = (t: string) => t.toLowerCase().replace(/^[ .,!?]+|[ .,!?]+$/g, "");
+export const normRu = (t: string) => t.toLowerCase().replace(/ё/g, "е").replace(/^[ .,!?]+|[ .,!?]+$/g, "");
 
 // --- Определение языка ---
 export interface Detection { lang: string | null; options: string[]; alternatives: string[] }

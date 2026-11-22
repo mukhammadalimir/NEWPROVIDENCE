@@ -46,9 +46,9 @@ export function App() {
     toastTimer.current = window.setTimeout(() => setToastMsg(""), 2600);
   }, []);
 
-  const openSearch = useCallback((q: string, source?: string) => {
+  const openSearch = useCallback((q: string, source?: string, target?: string) => {
     setTab("search");
-    setPending({ q, source, n: ++counter.current });
+    setPending({ q, source, target, n: ++counter.current });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 

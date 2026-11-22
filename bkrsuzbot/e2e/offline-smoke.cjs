@@ -73,6 +73,23 @@ const fakeVoice = () => {
   ok('ўқимоқ -> 学习', (await p.textContent('.hanzi')) === '学习');
   await search('рыба');
   ok('рыба -> 鱼', (await p.textContent('.hanzi')) === '鱼');
+  // Wiktionary: русские/узбекские слова, которых нет в карточках редакции
+  await search('осень');
+  const os = await p.$$eval('.list-row.cand', els => els.map(e => e.textContent));
+  ok('осень -> 秋天 first (Wiktionary) ' + os.slice(0, 2).join(' | '), os[0]?.includes('秋天') && os[0]?.includes('осень'));
+  await search('небо');
+  const nb = await p.$$eval('.list-row.cand .zh', els => els.map(e => e.textContent));
+  ok('небо -> 天 / 天空 ' + nb.slice(0, 3).join(','), nb[0] === '天' && nb.includes('天空'));
+  await p.click('.list-row.cand >> nth=1');
+  await p.waitForSelector('.hanzi');
+  ok('天空 card has Russian meaning + Wiktionary label', (await p.textContent('.word')).includes('небо') && (await p.textContent('.word')).includes('Wiktionary'));
+  await p.screenshot({path: S + 'wikt-card.png', fullPage: true});
+  await search('kuz');
+  ok('kuz -> 秋天', (await p.$$eval('.list-row.cand .zh', els => els[0].textContent)) === '秋天');
+  ok('target selector follows the query language (ru)', (await p.inputValue('select[aria-label=to]')) === 'ru');
+  await p.selectOption('select[aria-label=to]', 'uz');
+  await search('秋天');
+  ok('秋天 card (uz) shows kuz', (await p.textContent('.word')).includes('kuz'));
   await search('我喜欢吃鱼。');
   const txt = await p.textContent('main');
   ok('sentence: pinyin + words + honest notice', txt.includes('wǒ xǐhuan chī yú') && txt.includes('ulanmagan') && txt.includes('喜欢'));

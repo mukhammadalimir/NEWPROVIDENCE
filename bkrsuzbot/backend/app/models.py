@@ -66,6 +66,22 @@ class DictGloss(Base):
     __table_args__ = (Index("ix_dict_glosses_lang_term", "lang", "term"),)
 
 
+class WiktPair(Base):
+    """Wiktionary (CC BY-SA 4.0): слово ru/uz → китайское слово; rank 0 — самый прямой перевод.
+
+    Данные не проверены редакцией и помечаются в выдаче как «wikt»."""
+
+    __tablename__ = "wikt_pairs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lang: Mapped[str] = mapped_column(String(4))
+    term: Mapped[str] = mapped_column(String(64))
+    zh: Mapped[str] = mapped_column(String(16))
+    rank: Mapped[int] = mapped_column(Integer, default=0)
+
+    __table_args__ = (Index("ix_wikt_lang_term", "lang", "term"), Index("ix_wikt_lang_zh", "lang", "zh"))
+
+
 class User(Base):
     __tablename__ = "users"
 

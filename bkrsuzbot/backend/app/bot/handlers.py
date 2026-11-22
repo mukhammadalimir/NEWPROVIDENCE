@@ -108,12 +108,14 @@ async def cancel(message: Message, user: User, state: FSMContext):
 # ---------- Поиск ----------
 
 async def run_search(message: Message, session: AsyncSession, svc: Services, user: User,
-                     settings: Settings, query: str, source: str | None = None):
+                     settings: Settings, query: str, source: str | None = None,
+                     target: str | None = None):
     ui = user.ui_lang
     if not svc.search_limiter.allow(user.id):
         await message.answer(t(ui, "rate_limited"))
         return
-    result = await search(session, svc, query, user_target=user.target_lang, source=source)
+    result = await search(session, svc, query, user_target=user.target_lang, source=source,
+                          target=target)
     rtype = result["type"]
     q = result["query"]
 
@@ -145,9 +147,11 @@ async def run_search(message: Message, session: AsyncSession, svc: Services, use
 
     if rtype == "candidates":
         rows = []
+        # значения в выбранной карточке — на языке запроса (ru/uz)
+        mlang = result.get("source_lang") if result.get("source_lang") in ("uz", "ru") else ""
         for c in result["candidates"][:12]:
             label = f"{c['headword']}  {c['pinyin']}  {c['gloss']}"[:60]
-            rows.append([Btn(text=label, callback_data=f"e:{c['entry_id']}")])
+            rows.append([Btn(text=label, callback_data=f"e:{c['entry_id']}:{mlang}")])
         await session.commit()
         await message.answer(t(ui, "candidates", q=escape(q)), reply_markup=kb(rows + alt_rows))
         return
@@ -229,10 +233,12 @@ async def cb_search_as(cb: CallbackQuery, session: AsyncSession, svc: Services, 
 @router.callback_query(F.data.startswith("e:"))
 async def cb_entry(cb: CallbackQuery, session: AsyncSession, svc: Services, user: User,
                    settings: Settings):
-    entry = await session.get(DictEntry, int(cb.data[2:]))
+    _, eid, *rest = cb.data.split(":")
+    entry = await session.get(DictEntry, int(eid))
     await cb.answer()
     if entry:
-        await run_search(cb.message, session, svc, user, settings, entry.simplified, "zh")
+        await run_search(cb.message, session, svc, user, settings, entry.simplified, "zh",
+                         (rest[0] if rest and rest[0] in ("uz", "ru") else None))
 
 
 # ---------- Озвучка ----------
