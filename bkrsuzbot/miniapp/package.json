@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "build:offline": "rm -rf ../webapp/assets && tsc --noEmit && vite build --mode offline"
+    "build:offline": "node -e \"require('fs').rmSync('../webapp/assets',{recursive:true,force:true})\" && tsc --noEmit && vite build --mode offline"
   },
   "dependencies": {
     "react": "18.3.1",

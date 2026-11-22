@@ -2,7 +2,7 @@
 // Данные: data/cedict.json (CC-CEDICT, CC BY-SA 4.0) и data/meta.json (редакционные карточки).
 // Машинного перевода и AI здесь нет — фразы разбираются по словам, это честно помечается.
 
-import type { Candidate, Card, Kind, Reading, SearchResult, Sense, Source } from "../types";
+import type { BkrsItem, Candidate, Card, Colloc, Kind, Reading, SearchResult, Sense, Source } from "../types";
 import * as tx from "./text";
 
 interface Entry {
@@ -32,14 +32,64 @@ const gloss = { uz: new Map<string, Entry[]>(), ru: new Map<string, Entry[]>() }
 const wikt = { uz: new Map<string, string[]>(), ru: new Map<string, string[]>() };
 const wiktBack = { uz: new Map<string, [string, number][]>(), ru: new Map<string, [string, number][]>() };
 let loading: Promise<void> | null = null;
+let dataBase = "./data/";
 
-const push = <K,>(m: Map<K, Entry[]>, k: K, e: Entry) => {
+// 大БКРС (bkrs.info): статьи разбиты на части data/bkrs/N.json по хэшу написания,
+// часть скачивается, только когда нужна (см. backend/app/scripts/export_offline.py).
+// Строка: [0 заголовок | 1 значение, текст ru, uz?] или [2, пример zh, перевод ru, uz?].
+type BkrsLine = [0 | 1, string, string?] | [2, string, string, string?];
+interface BkrsArticle { r: Record<string, BkrsLine[]>; o: string[]; g?: string; gu?: string }
+let bkrsShards = 0;
+const shardCache = new Map<number, Promise<Record<string, BkrsArticle>>>();
+
+/** Тот же хэш, что shard_of() в export_offline.py. */
+export function bkrsShard(head: string, n: number): number {
+  let x = 0;
+  for (const ch of head) x = (Math.imul(x, 31) + ch.codePointAt(0)!) >>> 0;
+  return x % n;
+}
+
+async function bkrsArticles(heads: Iterable<string>): Promise<Map<string, BkrsArticle>> {
+  const out = new Map<string, BkrsArticle>();
+  if (!bkrsShards) return out;
+  const uniq = [...new Set(heads)];
+  const parts = new Set(uniq.map((h) => bkrsShard(h, bkrsShards)));
+  await Promise.all([...parts].map((n) => {
+    if (!shardCache.has(n)) {
+      const p = fetch(`${dataBase}bkrs/${n}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => {
+        shardCache.delete(n); // сеть пропала — попробуем в следующий раз
+        return {};
+      });
+      shardCache.set(n, p);
+    }
+    return shardCache.get(n)!;
+  }));
+  for (const h of uniq) {
+    const art = (await shardCache.get(bkrsShard(h, bkrsShards)))?.[h];
+    if (art) out.set(h, art);
+  }
+  return out;
+}
+
+/** Короткое значение БКРС для списков (как apply_short_glosses на сервере):
+ *  ru — как в словаре; uz — значение редакции не трогаем, иначе перевод БКРС, а если его
+ *  нет — русский БКРС вместо английского CC-CEDICT (узбекский Wiktionary оставляем). */
+function bkrsGloss(a: BkrsArticle | undefined, lang: string, current: Kind): [string, Kind] | null {
+  if (!a?.g) return null;
+  if (lang === "ru") return [a.g, "bkrs"];
+  if (lang !== "uz" || current === "curated") return null;
+  if (a.gu) return [a.gu, "bkrs_mt"];
+  return current === "cedict_en" ? [a.g, "bkrs"] : null;
+}
+
+const push =<K,>(m: Map<K, Entry[]>, k: K, e: Entry) => {
   const list = m.get(k);
   if (list) list.push(e); else m.set(k, [e]);
 };
 
 export function loadDictionary(base = "./data/"): Promise<void> {
   if (loading) return loading;
+  dataBase = base;
   loading = (async () => {
     const [meta, cedict, wk] = await Promise.all([
       fetch(base + "meta.json").then((r) => { if (!r.ok) throw new Error("meta"); return r.json(); }),
@@ -57,6 +107,7 @@ export function loadDictionary(base = "./data/"): Promise<void> {
       }
     }
     tx.setSyllables(meta.syllables);
+    bkrsShards = Number(meta.bkrs?.shards) || 0;
     const freq = new Map<string, number>();
     (cedict as [string, string, string, string, string, number][]).forEach(([simp, trad, pin, defs, mw, f]) => {
       const [toneKey, key] = tx.keysFromNumbered(pin);
@@ -123,13 +174,76 @@ function shortGloss(list: Entry[], lang: string): [string, Kind | ""] {
   return pick.length ? [pick.slice(0, 2).join("; "), "cedict_en"] : ["", ""];
 }
 
-function matchesReading(c: Entry, head: string, toneKey: string): boolean {
+/** Как _matches_reading в dictionary.py: нейтральный тон (狗东西 gou3 dong1 xi5) подходит
+ *  «по слогам», только если у слова нет чтения, совпадающего точно (东西 dōngxi, а не dōngxī). */
+function matchesReading(c: Entry, head: string, toneKey: string, allKeys: string[] = [], allowNeutral = true): boolean {
   const parts = c.pin.toLowerCase().replace(/u:/g, "v").split(" ");
   if (parts.length !== [...c.simp].length) return false;
   const i = [...c.simp].findIndex((_, k) => [...c.simp].slice(k, k + [...head].length).join("") === head);
   const sub = parts.slice(i, i + [...head].length).join("");
   const s5 = (s: string) => s.replace(/5/g, "");
-  return sub === toneKey || s5(sub) === s5(toneKey) || (tx.keysFromNumbered(sub)[1] === tx.keysFromNumbered(toneKey)[1] && sub.includes("5"));
+  const exact = (k: string) => sub === k || s5(sub) === s5(k);
+  if (exact(toneKey)) return true;
+  if (!allowNeutral || allKeys.some(exact)) return false;
+  return tx.keysFromNumbered(sub)[1] === tx.keysFromNumbered(toneKey)[1] && sub.includes("5");
+}
+
+// словосочетания, подошедшие только «по слогам», — оставим их у основного чтения
+const neutralColl = new WeakSet<Colloc>();
+
+function neutralToMain(cards: Card[]) {
+  for (const card of cards) {
+    const main = card.readings.find((r) => !r.proper) ?? card.readings[0];
+    for (const r of card.readings) r.collocations = r.collocations.filter((c) => !neutralColl.has(c) || r === main);
+  }
+}
+
+/** Значения 大БКРС в карточках: ru — как на bkrs.info, uz — перевод, если он уже есть в данных. */
+async function attachBkrs(cards: Card[], lang: string) {
+  const heads = cards.flatMap((c) => [c.headword, ...c.readings.flatMap((r) => r.collocations.map((x) => x.zh))]);
+  const arts = await bkrsArticles(heads);
+  for (const card of cards) {
+    const art = arts.get(card.headword);
+    for (const r of card.readings) {
+      for (const c of r.collocations) {
+        const g = c.gloss_kind === "cedict_en" ? bkrsGloss(arts.get(c.zh), lang, c.gloss_kind) : null;
+        if (g) [c.gloss, c.gloss_kind] = g;
+      }
+      const lines = art?.r[`${r.key}|${r.proper}`];
+      if (!lines?.length) continue;
+      const uzReady = lang === "uz" && lines.every((l) => (l[0] === 2 ? !l[2] || Boolean(l[3]) : Boolean(l[2])));
+      r.bkrs = lines.map((l): BkrsItem => l[0] === 2
+        ? { level: 2, kind: "ex", reading: null, text: `${l[1]} ${l[2]}`, zh: l[1], tr: (uzReady && l[3]) || l[2] }
+        : { level: 1, kind: l[0] === 0 ? "head" : "sense", reading: null, text: (uzReady && l[2]) || l[1] });
+      r.bkrs_kind = lang !== "uz" ? "bkrs" : uzReady ? "bkrs_mt" : "bkrs_ru";
+    }
+    if (art?.o?.length) {
+      const rank = (r: Reading) => {
+        const i = art.o.indexOf(`${r.key}|${r.proper}`);
+        return (r.proper ? 1000 : 0) + (i < 0 ? art.o.length : i);
+      };
+      card.readings = [...card.readings].sort((a, b) => rank(a) - rank(b));
+    }
+  }
+}
+
+/** Короткие значения БКРС для списков (разбор фразы — по zh, кандидаты — по headword). */
+async function withBkrsGloss<T extends { gloss: string; gloss_kind: Kind; zh?: string; headword?: string }>(
+  rows: T[], lang: string): Promise<T[]> {
+  const key = (r: T) => r.zh ?? r.headword ?? "";
+  const arts = await bkrsArticles(rows.map(key));
+  for (const r of rows) {
+    const g = bkrsGloss(arts.get(key(r)), lang, r.gloss_kind);
+    if (g) [r.gloss, r.gloss_kind] = g;
+  }
+  return rows;
+}
+
+async function cardsFor(list: Entry[], lang: string): Promise<Card[]> {
+  const cards = buildCards(list, lang);
+  await attachBkrs(cards, lang);
+  neutralToMain(cards);
+  return cards;
 }
 
 function collocationPool(head: string): Entry[] {
@@ -153,6 +267,7 @@ function buildCards(list: Entry[], lang: string): Card[] {
     const pool = collocationPool(head);
     const wm = wiktMeanings(head, lang);
     const commonReadings = [...readings.keys()].filter((k) => k.endsWith("|false"));
+    const allKeys = [...readings.keys()].map((k) => k.split("|")[0]);
     const out: Reading[] = [];
     for (const [k, rs] of readings) {
       const toneKey = k.split("|")[0];
@@ -163,9 +278,11 @@ function buildCards(list: Entry[], lang: string): Card[] {
       const seen = new Set(coll.map((c) => c.zh));
       for (const c of pool) {
         if (coll.length >= 6) break;
-        if (seen.has(c.simp) || !matchesReading(c, head, toneKey)) continue;
+        if (seen.has(c.simp) || !matchesReading(c, head, toneKey, allKeys)) continue;
         seen.add(c.simp);
-        coll.push({ zh: c.simp, pinyin: tx.wordMarks(c.pin), gloss: (c.senses[0].en ?? []).slice(0, 2).join("; "), gloss_kind: "cedict_en" });
+        const item: Colloc = { zh: c.simp, pinyin: tx.wordMarks(c.pin), gloss: (c.senses[0].en ?? []).slice(0, 2).join("; "), gloss_kind: "cedict_en" };
+        if (!matchesReading(c, head, toneKey, allKeys, false)) neutralColl.add(item);
+        coll.push(item);
       }
       const senses: Sense[] = curated.flatMap((e) => e.senses.filter((s) => (s as Record<string, string[]>)[lang]?.length).map((s) => ({
         pos: pos(s.pos, lang), items: (s as Record<string, string[]>)[lang], kind: "curated" as Kind, verified: e.verified })));
@@ -262,7 +379,7 @@ export async function search(query: string, opts: { userTarget: string; source?:
     const han = q.replace(/[\s，。！？、,.!?]/g, "");
     if ([...han].length <= 6) {
       const found = findHead(han);
-      if (found.length) return { ...base, type: "word", cards: buildCards(found, meaningLang) };
+      if (found.length) return { ...base, type: "word", cards: await cardsFor(found, meaningLang) };
     }
     const words = segmentZh(q);
     const seen = new Set<string>();
@@ -276,7 +393,7 @@ export async function search(query: string, opts: { userTarget: string; source?:
       breakdown.push({ zh: w, pinyin: readingFor(w), gloss: g, gloss_kind: (kind || "cedict_en") as Kind });
     }
     return { ...base, type: "text", notices: ["translate_unavailable"], text: {
-      source: q, translation: null, zh: q, pinyin: sentencePinyin(q), words: breakdown.slice(0, 15), provider: null } };
+      source: q, translation: null, zh: q, pinyin: sentencePinyin(q), words: await withBkrsGloss(breakdown.slice(0, 15), meaningLang), provider: null } };
   }
 
   if (source === "pinyin") {
@@ -291,8 +408,8 @@ export async function search(query: string, opts: { userTarget: string; source?:
     }
     const groups = group([...list].sort((a, b) => b.freq - a.freq));
     if (!groups.size) return base;
-    if (groups.size === 1) return { ...base, type: "word", cards: buildCards(list, meaningLang) };
-    return { ...base, type: "candidates", candidates: candidates(groups, meaningLang, tx.tonelessKey(syls)).slice(0, 20) };
+    if (groups.size === 1) return { ...base, type: "word", cards: await cardsFor(list, meaningLang) };
+    return { ...base, type: "candidates", candidates: await withBkrsGloss(candidates(groups, meaningLang, tx.tonelessKey(syls)).slice(0, 20), meaningLang) };
   }
 
   // Узбекский / русский → китайский: словарь редакции + переводы из Wiktionary
@@ -313,8 +430,8 @@ export async function search(query: string, opts: { userTarget: string; source?:
   if (groups.size === 1) {
     const keys = new Set(found.map((e) => `${e.simp}|${e.toneKey}|${isProper(e)}`));
     const extra = found.length ? (bySimp.get(found[0].simp) ?? []).filter((e) => e.source === "cedict" && keys.has(`${e.simp}|${e.toneKey}|${isProper(e)}`)) : [];
-    return { ...base, type: "word", cards: buildCards([...[...groups.values()][0], ...extra], meaningLang) };
+    return { ...base, type: "word", cards: await cardsFor([...[...groups.values()][0], ...extra], meaningLang) };
   }
-  if (groups.size > 1) return { ...base, type: "candidates", candidates: candidates(groups, meaningLang, undefined, order) };
+  if (groups.size > 1) return { ...base, type: "candidates", candidates: await withBkrsGloss(candidates(groups, meaningLang, undefined, order), meaningLang) };
   return { ...base, notices: ["translate_unavailable"] };
 }

@@ -7,8 +7,55 @@ Telegram-бот **@Bkrsuzbot** + Telegram Mini App для перевода и и
 - Mini App: подробные карточки, история, избранное, повторение, настройки, админ-панель.
 - Регистрация не нужна: пользователь определяется по Telegram ID.
 
+## 0. Bepul rejim: o'z kompyuteringizda, 0 so'm
+
+Server, domen va pullik kalitlar kerak emas. Bot Windows kompyuteringizda ishlaydi
+(kompyuter yoniq turganda), Mini App esa GitHub Pages'da bepul ochiladi.
+
+| Funksiya | Bepul rejimda |
+|---|---|
+| Lug'at (CC-CEDICT, redaksiya kartochkalari, Wiktionary) | bot yonidagi SQLite fayl (`backend\bkrsuz.db`) |
+| Xitoycha so'z ma'nolari | **大БКРС (bkrs.info)**: odamlar yozgan ruscha ma'nolar, saytdagidek. O'zbek tili tanlansa, xuddi shu ma'nolar ruschadan o'zbekchaga tarjima qilinadi (Gemini) |
+| Matn tarjimasi | Gemini API, bepul kalit (karta kerak emas) |
+| AI tushuntirish va misollar | Gemini API, shu kalit bilan |
+| Ovoz (talaffuz) | edge-tts: Microsoft ovozlari, kalitsiz (`zh-CN-XiaoxiaoNeural` va boshqalar) |
+| Mini App | `https://mukhammadalimir.github.io/NEWPROVIDENCE/bkrsuzbot/webapp/` |
+
+**O'rnatish (bir marta):**
+
+1. Python 3.12 o'rnating: https://www.python.org/downloads/ (o'rnatishda **"Add python.exe to PATH"** belgisini qo'ying).
+2. @BotFather'dan bot tokenini oling.
+3. Bepul Gemini kalitini oling: https://aistudio.google.com/apikey
+4. `bkrsuzbot\ishga_tushirish.bat` faylini ikki marta bosing. Birinchi safar u `backend\.env` faylini
+   ochadi: `BOT_TOKEN`, `GEMINI_API_KEY` va `ADMIN_IDS` ni yozing, saqlang va `.bat` ni qayta oching.
+   U kutubxonalarni o'rnatadi, lug'atni yuklaydi va botni ishga tushiradi.
+5. Kompyuter yoqilganda bot o'zi ishga tushishi uchun `avtostart_qoshish.bat` ni bir marta ishga tushiring.
+
+**Bilish kerak:**
+
+- Oyna yopilsa yoki kompyuter o'chsa, bot javob bermaydi. Bot to'xtab qolsa, `.bat` uni 15 soniyadan keyin qayta ishga tushiradi.
+- Gemini'ning bepul tarifida kunlik limit bor. Limit tugasa, tarjima va AI vaqtincha xato beradi,
+  lug'at qidiruvi esa ishlashda davom etadi. Har bir tarjima bazada keshlanadi.
+- edge-tts rasmiy bo'lmagan xizmat: Microsoft uni o'zgartirsa, ovoz ishlamay qolishi mumkin
+  (`pip install -U edge-tts` odatda yordam beradi).
+- bkrs.info lug'ati (~90 MB) birinchi ishga tushirishda bir marta yuklanadi. Yangilash uchun
+  `backend\.bkrs_imported` faylini o'chirib, `.bat` ni qayta oching. Baza ~420 MB joy egallaydi.
+- Zaxira nusxa: `backend\bkrsuz.db` faylini nusxalab qo'ying (sevimlilar, tarix, redaksiya o'zgarishlari).
+- Mini App serversiz rejimda ishlaydi: qidiruv telefonda bo'ladi, sevimlilar Telegram CloudStorage'da saqlanadi.
+  Unda ham bkrs.info ma'nolari bor: telefon faqat ochilgan so'zning bo'lagini yuklaydi. O'zbekcha
+  tarjima Mini App'da faqat bot avval tarjima qilib keshlagan qatorlar uchun chiqadi
+  (`export_offline` qayta ishga tushirilganda qo'shiladi), qolganlari ruscha ko'rsatiladi.
+  Matn tarjimasi, AI va admin panel faqat botning o'zida (pastda "Mini App без сервера" bo'limiga qarang).
+  Mini App yangilanishi `main` branchga merge qilingandan keyin GitHub Pages'da ko'rinadi.
+
+Платные ключи по-прежнему работают: если задан `GOOGLE_API_KEY`, озвучка идёт через Google
+(`TTS_PROVIDER=auto`), при `ANTHROPIC_API_KEY` AI-пояснения — через Claude; иначе бесплатно
+через edge-tts и Gemini. Без `DATABASE_URL` используется SQLite (`bkrsuz.db`); Docker Compose,
+как и раньше, работает с PostgreSQL.
+
 ## Содержание
 
+0. [Bepul rejim (o'z kompyuteringizda)](#0-bepul-rejim-oz-kompyuteringizda-0-som)
 1. [Архитектура](#1-архитектура)
 2. [Источники данных и честность результатов](#2-источники-данных-и-честность-результатов)
 3. [Настройка бота в BotFather](#3-настройка-бота-в-botfather)
@@ -196,7 +243,9 @@ Mini App ──► api (FastAPI) ───────────────�
 | Google Cloud Translation (Basic v2) | ≈ $20 за 1 млн символов | 500 тыс. символов/мес | кэш каждого перевода в БД |
 | Google Cloud Text-to-Speech (WaveNet) | ≈ $16 за 1 млн символов | ≈ 1 млн символов/мес для WaveNet | кэш аудиофайлов на диске, лимит 300 символов |
 | Claude API (Opus 5.5) | $4 / $20 за 1 млн входных/выходных токенов | — | только по кнопке, кэш, лимит 20 запросов/час на пользователя |
-| VPS для сервера | от ~$5/мес | — | 1 vCPU / 1–2 ГБ RAM достаточно |
+| VPS для сервера | от ~$5/мес | — | 1 vCPU / 1–2 ГБ RAM достаточно; или свой компьютер (раздел 0) |
+| Gemini API (перевод, AI-пояснения) | платный тариф по желанию | бесплатный ключ AI Studio с дневным лимитом | кэш в БД |
+| edge-tts (голоса Microsoft Edge) | — | бесплатно, без ключа (неофициальный сервис) | кэш аудиофайлов |
 | Telegram Bot API, CC-CEDICT, jieba, pypinyin | бесплатно | — | — |
 
 Админ может выключить любую платную функцию в админ-панели без перезапуска.
@@ -223,6 +272,7 @@ alembic upgrade head
 python -m app.scripts.import_cedict --url https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz
 python -m app.scripts.seed
 python -m app.scripts.import_wikt --file ../webapp/data/wikt.json   # переводы ru/uz из Wiktionary
+python -m app.scripts.import_bkrs   # 大БКРС (bkrs.info), ~90 МБ, свежая ежедневная база
 
 # 4. Mini App
 cd ../miniapp && npm ci && npm run build && cd ../backend
@@ -256,6 +306,7 @@ docker compose run --rm api python -m app.scripts.import_cedict \
   --url https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz
 docker compose run --rm api python -m app.scripts.seed
 docker compose run --rm api python -m app.scripts.import_wikt --file data/wikt.json
+docker compose run --rm api python -m app.scripts.import_bkrs
 docker compose restart bot
 ```
 
@@ -278,6 +329,11 @@ docker compose restart bot
   и ищется прямо в браузере: иероглифы, пиньинь, узбекский/русский по словарю редакции
   и Wiktionary,
   разные чтения, словосочетания, примеры, разбор фраз по словам.
+- Значения 大БКРС (как в боте): `webapp/data/bkrs/N.json` — 1024 части по хэшу написания
+  (~36 МБ всего, часть 20–60 КБ); телефон скачивает только части нужных слов. ru — как в БКРС;
+  uz — перевод строк, если бот уже переводил их (берётся из кэша при экспорте), иначе русский
+  с пометкой. В списках для uz значение редакции остаётся, английский CC-CEDICT заменяется
+  русским БКРС.
 - Избранное, история, повторение и настройки хранятся в **Telegram CloudStorage**
   (отдельно для каждого пользователя, синхронизируются между устройствами).
 - Озвучка — китайский голос телефона (Web Speech API); если его нет, кнопки скрыты.
@@ -287,13 +343,32 @@ docker compose restart bot
 Обновление после правок словаря или кода:
 
 ```bash
-cd bkrsuzbot/miniapp && npm run build:offline
-cd ../backend && python -m app.scripts.export_offline --out ../webapp/data
+cd bkrsuzbot/miniapp && npm run build:offline      # работает и в Windows
+cd ../backend && python -m app.scripts.export_offline --out ../webapp/data   # нужна база с import_bkrs
 git add ../webapp && git commit -m "Update offline Mini App" && git push
 ```
 
 Проверка: `python3 -m http.server 8090` из корня репозитория, затем
 `node bkrsuzbot/e2e/offline-smoke.cjs` (31 проверка на экране iPhone/Android).
+
+### Значения из 大БКРС (bkrs.info)
+
+CC-CEDICT — китайско-английский словарь, и раньше значения для ru/uz получались машинным
+переводом английских определений, поэтому не совпадали с bkrs.info. Теперь для китайского
+слова берётся статья **大БКРС** — человеческого китайско-русского словаря (~3,5 млн статей):
+
+- **ru** — значения как на bkrs.info: тот же порядок, пометы (гл., сущ., перен.), примеры
+  (до 2 к каждому значению), разные чтения (`行 xíng / háng`) — по отдельности;
+- **uz** — те же строки БКРС переводятся ru→uz (Gemini, кэш в БД); если перевод недоступен —
+  показывается русский оригинал с пометкой;
+- выражения, которых нет в CC-CEDICT (чэнъюи, устойчивые выражения, термины), показываются
+  статьёй БКРС, а не машинным переводом; в разборе фразы по словам и в списках по пиньиню —
+  первое значение БКРС; словосочетания в карточке — тоже из БКРС.
+
+Источник: ежедневная база `https://bkrs.info/downloads/daily/dabkrs_YYMMDD.gz` (DSL), импорт —
+`app/scripts/import_bkrs.py`, разбор разметки — `app/text/dsl.py`, сборка — `app/services/bkrs.py`.
+bkrs.info: «Базы можно использовать свободно в любых целях. Можно указать данный сайт как
+источник» — источник «📚 大БКРС (bkrs.info)» указан в каждой карточке.
 
 ### Переводы ru/uz ↔ китайский из Wiktionary
 
@@ -322,13 +397,18 @@ python -m app.scripts.import_wikt --file ../webapp/data/wikt.json   # для б�
 
 ## 8. Проверки и как их повторить
 
-### Автотесты (40 шт.)
+### Автотесты (61 шт.)
 
 ```bash
 createdb -O bkrsuz bkrsuz_test
 cd bkrsuzbot/backend
 TEST_DATABASE_URL=postgresql+asyncpg://bkrsuz:bkrsuz@localhost:5432/bkrsuz_test python -m pytest -q
+# или без PostgreSQL — на файле SQLite (как в бесплатном режиме):
+TEST_DATABASE_URL=sqlite+aiosqlite:///test.db python -m pytest -q
 ```
+
+Бесплатный режим (edge-tts, Gemini для AI, выбор провайдеров) — `tests/test_free.py`;
+大БКРС (разбор DSL, импорт, ru как в словаре, uz — перевод, выражения только из БКРС) — `tests/test_bkrs.py`.
 
 Тесты используют настоящую PostgreSQL, миграции Alembic и фрагмент CC-CEDICT
 (`tests/data/cedict_sample.u8`). Ответы Google в тестах подменяются через

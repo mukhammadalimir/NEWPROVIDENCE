@@ -19,14 +19,14 @@ def upgrade() -> None:
     op.create_table('bot_payloads',
     sa.Column('id', sa.String(length=16), nullable=False),
     sa.Column('data', sa.JSON(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('cache_items',
     sa.Column('key', sa.String(length=64), nullable=False),
     sa.Column('kind', sa.String(length=16), nullable=False),
     sa.Column('value', sa.JSON(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.PrimaryKeyConstraint('key')
     )
     op.create_table('dict_entries',
@@ -45,7 +45,7 @@ def upgrade() -> None:
     sa.Column('verified', sa.Boolean(), nullable=False),
     sa.Column('freq', sa.Integer(), nullable=False),
     sa.Column('updated_by', sa.BigInteger(), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_dict_entries_pinyin_key'), 'dict_entries', ['pinyin_key'], unique=False)
@@ -63,7 +63,7 @@ def upgrade() -> None:
     sa.Column('service', sa.String(length=16), nullable=False),
     sa.Column('ok', sa.Boolean(), nullable=False),
     sa.Column('detail', sa.String(length=300), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_service_events_created_at'), 'service_events', ['created_at'], unique=False)
@@ -73,8 +73,8 @@ def upgrade() -> None:
     sa.Column('ui_lang', sa.String(length=4), nullable=False),
     sa.Column('target_lang', sa.String(length=4), nullable=False),
     sa.Column('voice', sa.String(length=64), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('last_seen', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+    sa.Column('last_seen', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('dict_glosses',
@@ -93,7 +93,7 @@ def upgrade() -> None:
     sa.Column('entry_id', sa.Integer(), nullable=True),
     sa.Column('message', sa.Text(), nullable=False),
     sa.Column('status', sa.String(length=16), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['entry_id'], ['dict_entries.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
@@ -106,8 +106,8 @@ def upgrade() -> None:
     sa.Column('gloss', sa.Text(), nullable=False),
     sa.Column('entry_id', sa.Integer(), nullable=True),
     sa.Column('box', sa.Integer(), nullable=False),
-    sa.Column('due_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('due_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['entry_id'], ['dict_entries.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
@@ -119,7 +119,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.BigInteger(), nullable=False),
     sa.Column('query', sa.String(length=500), nullable=False),
     sa.Column('kind', sa.String(length=16), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )

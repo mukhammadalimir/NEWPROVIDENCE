@@ -8,7 +8,7 @@ RUN npm run build
 
 # 2) Python: API + бот
 FROM python:3.12-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MINIAPP_DIST=/app/miniapp_dist
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MINIAPP_DIST=/app/miniapp_dist AUDIO_CACHE_DIR=/data/audio
 WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \

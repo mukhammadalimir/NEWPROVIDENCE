@@ -1,5 +1,6 @@
 """Машинный перевод через Gemini (ответы подменяются, настоящий API не вызывается)."""
 
+import json
 from app.services.search import search
 from app.services.translate import FallbackTranslator, GeminiTranslator
 
@@ -33,3 +34,14 @@ async def test_gemini_bad_answer_is_failure(session, make_services, google):
     google.gemini_reply = '["a", "b"]'  # не столько строк, сколько отправлено
     r = await search(session, svc, "她喜欢喝茶。", user_target="uz")
     assert "translate_failed" in r["notices"] and r["text"]["translation"] is None
+
+
+async def test_prompt_from_chinese_asks_to_translate_characters(session, make_services, google):
+    svc = make_services(google_api_key="", gemini_api_key="g-key")
+    await svc.translator.translate(session, ["我们明天见。"], "zh", "ru")
+    prompt = json.loads(google.calls[-1].content)["contents"][0]["parts"][0]["text"]
+    assert "do not leave Chinese characters" in prompt
+    assert "Keep Chinese characters" not in prompt
+    await svc.translator.translate(session, ["1) идти, ходить"], "ru", "uz")
+    prompt = json.loads(google.calls[-1].content)["contents"][0]["parts"][0]["text"]
+    assert "Keep Chinese characters" in prompt

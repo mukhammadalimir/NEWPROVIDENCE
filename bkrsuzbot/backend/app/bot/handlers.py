@@ -195,8 +195,7 @@ async def card_keyboard(session: AsyncSession, svc: Services, settings: Settings
             pid = await ud.put_payload(session, {"text": card["headword"]})
             row += [Btn(text=t(ui, "btn_listen", w=label), callback_data=f"a:{pid}:0"),
                     Btn(text=t(ui, "btn_slow"), callback_data=f"a:{pid}:1")]
-        gloss = ", ".join(r["senses"][0]["items"]) if r["senses"] else (
-            "; ".join((r.get("english_mt") or r["english"])[:2]))
+        gloss = dic.reading_gloss(r)
         fav = await ud.find_favorite(session, user.id, card["headword"], r["pinyin"])
         fpid = await ud.put_payload(session, {"h": card["headword"], "p": r["pinyin"],
                                               "g": gloss, "e": r["entry_id"]})
@@ -204,11 +203,13 @@ async def card_keyboard(session: AsyncSession, svc: Services, settings: Settings
         row.append(Btn(text=t(ui, "btn_saved" if fav else "btn_save", w=w).strip(),
                        callback_data=f"f:{fpid}"))
         rows.append(row)
-        if avail["tts"] and r["examples"]:
-            pid = await ud.put_payload(session, {"text": r["examples"][0]["zh"]})
+        example = (r["examples"][0]["zh"] if r["examples"] else next(
+            (it["zh"] for it in r.get("bkrs") or [] if it["kind"] == "ex" and it.get("zh")), None))
+        if avail["tts"] and example:
+            pid = await ud.put_payload(session, {"text": example[:300]})
             rows.append([Btn(text=t(ui, "btn_listen_sentence") + (f" ({r['pinyin']})" if multi else ""),
                              callback_data=f"a:{pid}:0")])
-        if avail["ai"] and not r["examples"]:
+        if avail["ai"] and not r["examples"] and r["entry_id"]:
             rows.append([Btn(text=t(ui, "btn_ai") + (f" — {r['pinyin']}" if multi else ""),
                              callback_data=f"x:{r['entry_id']}:{lang}")])
     rpid = await ud.put_payload(session, {"q": query, "e": card["readings"][0]["entry_id"]})
@@ -260,7 +261,8 @@ async def cb_audio(cb: CallbackQuery, session: AsyncSession, svc: Services, user
         return
     await cb.answer()
     try:
-        audio = await svc.tts.synthesize(data["text"], user.voice or None, slow == "1", "ogg")
+        fmt = svc.tts.voice_format  # Telegram принимает голосовые в OGG/OPUS или MP3
+        audio = await svc.tts.synthesize(data["text"], user.voice or None, slow == "1", fmt)
     except TTSUnavailable as e:
         await log_event(session, "tts", False, str(e))
         await session.commit()
@@ -268,7 +270,7 @@ async def cb_audio(cb: CallbackQuery, session: AsyncSession, svc: Services, user
         return
     await log_event(session, "tts", True, "chat")
     await session.commit()
-    await bot.send_voice(cb.message.chat.id, BufferedInputFile(audio, "voice.ogg"),
+    await bot.send_voice(cb.message.chat.id, BufferedInputFile(audio, f"voice.{fmt}"),
                          caption=data["text"][:200])
 
 
@@ -618,8 +620,7 @@ async def inline(query: InlineQuery, session: AsyncSession, svc: Services, user:
         lang = render.meaning_lang(result)
         for i, card in enumerate(result["cards"][:5]):
             r0 = card["readings"][0]
-            desc = ", ".join(r0["senses"][0]["items"]) if r0["senses"] else "; ".join(
-                (r0.get("english_mt") or r0["english"])[:2])
+            desc = dic.reading_gloss(r0)
             items.append(InlineQueryResultArticle(
                 id=f"w{i}", title=f"{card['headword']}  {r0['pinyin']}", description=desc[:100],
                 input_message_content=InputTextMessageContent(

@@ -97,12 +97,21 @@ Translate each string of the JSON array below from {src} to {tgt}.
 Rules:
 - Return ONLY a JSON array of strings, the same length and order as the input.
 - Uzbek must be in Latin script with the letters oʻ, gʻ written as o‘ and g‘.
-- Keep Chinese characters, pinyin, numbers, numbering like 1) 2) and separators (; / ,) unchanged.
-- Translate dictionary glosses as short dictionary meanings, not full sentences.
+{keep_rule}
+- A dictionary gloss or a single word/set phrase → a short dictionary meaning; a full sentence →
+  a natural, accurate sentence.
 - Do not add explanations, do not omit or invent meanings. Use the commonly accepted term.
 
 Input:
 {texts}"""
+
+
+KEEP_OTHER = ("- Keep Chinese characters, pinyin, numbers, numbering like 1) 2) а) б) and "
+              "separators (; / ,) unchanged.")
+# Перевод С китайского: иероглифы как раз и надо перевести (раньше правило «сохранять
+# иероглифы» противоречило задаче и давало непереведённые фразы).
+KEEP_FROM_ZH = ("- Translate the Chinese text fully; do not leave Chinese characters in the "
+                "result (only transliterate proper names). Keep numbers unchanged.")
 
 
 class GeminiTranslator(CachedTranslator):
@@ -117,7 +126,8 @@ class GeminiTranslator(CachedTranslator):
         self.model = model
 
     async def _call(self, texts: list[str], src: str, tgt: str) -> list[str]:
-        prompt = GEMINI_PROMPT.format(src=LANG_NAMES[src], tgt=LANG_NAMES[tgt],
+        keep = (KEEP_FROM_ZH if src == "zh" else KEEP_OTHER)
+        prompt = GEMINI_PROMPT.format(src=LANG_NAMES[src], tgt=LANG_NAMES[tgt], keep_rule=keep,
                                       texts=json.dumps(texts, ensure_ascii=False))
         body = {
             "contents": [{"parts": [{"text": prompt}]}],

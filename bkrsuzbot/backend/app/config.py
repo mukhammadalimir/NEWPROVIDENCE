@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     proxy_url: str = ""  # прокси для api.telegram.org (необязательно)
 
     # --- База данных ---
-    database_url: str = "postgresql+asyncpg://bkrsuz:bkrsuz@localhost:5432/bkrsuz"
+    # По умолчанию — файл SQLite рядом с ботом (бесплатно, без сервера БД).
+    # Для PostgreSQL: postgresql+asyncpg://user:pass@host:5432/db
+    database_url: str = "sqlite+aiosqlite:///bkrsuz.db"
 
     # --- Google Cloud (перевод и озвучка) ---
     google_api_key: str = ""
@@ -28,7 +30,13 @@ class Settings(BaseSettings):
         default_factory=lambda: ["cmn-CN-Wavenet-A", "cmn-CN-Wavenet-B",
                                  "cmn-CN-Wavenet-C", "cmn-CN-Wavenet-D"])
     tts_slow_rate: float = 0.7
-    audio_cache_dir: str = "/data/audio"
+    audio_cache_dir: str = "audio_cache"
+    # Бесплатная озвучка (edge-tts, голоса Microsoft, без ключа) — если нет ключа Google.
+    # TTS_PROVIDER: auto | google | edge | off
+    tts_provider: str = "auto"
+    edge_voices: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural",
+                                 "zh-CN-XiaoyiNeural", "zh-CN-YunjianNeural"])
 
     # --- Google Gemini: бесплатный машинный перевод (ключ https://aistudio.google.com/apikey) ---
     gemini_api_key: str = ""
@@ -47,7 +55,7 @@ class Settings(BaseSettings):
     rate_tts_per_min: int = 30
     rate_ai_per_hour: int = 20
 
-    @field_validator("admin_ids", "tts_voices", mode="before")
+    @field_validator("admin_ids", "tts_voices", "edge_voices", mode="before")
     @classmethod
     def _split_list(cls, v):
         if isinstance(v, str):
