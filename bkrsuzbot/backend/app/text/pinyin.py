@@ -188,6 +188,9 @@ def approx_uz(pinyin_num: str) -> str:
     words = []
     for token in pinyin_num.lower().replace("u:", "v").split():
         base = re.sub(r"\d", "", token)
+        if not base or not base.isalpha():  # «11» в «Shuang1 11» (双11), латиница и т.п.
+            words.append(token)
+            continue
         init, rest = "", base
         for a, b in _INITIALS:
             if base.startswith(a):

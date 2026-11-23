@@ -110,3 +110,12 @@ async def test_service_unavailable_messages(session, make_services, google):
     assert "translate_failed" in r["notices"] and r["text"]["translation"] is None
     r = await search(session, make_services(), "Bugun havo juda yaxshi ekan")
     assert r["type"] == "not_found" and r["notices"] == ["translate_failed"]
+
+
+async def test_variant_row_is_not_the_traditional_form(session, make_services):
+    # 昰 是 /variant of 是/ — вариант написания, традиционная форма 是 — сам 是
+    r = await search(session, make_services(google_api_key=""), "是", user_target="ru")
+    assert r["cards"][0]["traditional"] is None
+    # 里: 裏 — «variant of», 裡 — настоящая традиционная форма
+    r = await search(session, make_services(google_api_key=""), "里", user_target="ru")
+    assert r["cards"][0]["traditional"] == "裡"

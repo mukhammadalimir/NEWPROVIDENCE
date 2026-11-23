@@ -179,7 +179,10 @@ async def run_search(message: Message, session: AsyncSession, svc: Services, use
     for card in result["cards"][:3]:
         markup = await card_keyboard(session, svc, settings, user, card, q, lang)
         await session.commit()
-        await message.answer(render.card_text(card, ui, lang), reply_markup=kb(markup + alt_rows))
+        parts = render.card_messages(card, ui, lang)  # длинная карточка — несколько сообщений
+        for part in parts[:-1]:
+            await message.answer(part)
+        await message.answer(parts[-1], reply_markup=kb(markup + alt_rows))
 
 
 async def card_keyboard(session: AsyncSession, svc: Services, settings: Settings, user: User,

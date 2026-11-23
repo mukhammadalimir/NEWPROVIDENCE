@@ -24,9 +24,12 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import SessionLocal, engine
-from app.models import DictEntry
-from app.scripts.export_offline import article_strings, collect_articles, uz_cache
-from app.services.translate import GeminiTranslator, TranslationUnavailable
+from app.models import CacheItem, DictEntry
+from app.scripts.export_offline import (MT_PROVIDERS, _mt_key, article_strings,
+                                       collect_articles, uz_cache)
+from app.services.translate import (GeminiTranslator, TranslationUnavailable,
+                                    fix_uz_numbering, uz_problem)
+from app.text import uzbek
 
 
 class Stop(Exception):
@@ -107,6 +110,30 @@ class Runner:
                 await self._next_model(msg, limited="http 429" in msg)
 
 
+async def recheck(texts: list[str]) -> tuple[int, int]:
+    """Уже сохранённые переводы ru→uz этих строк: апострофы — к единому виду
+    (uzbek.typographic), негодные по uz_problem (кириллица, потерянные иероглифы, номера…) —
+    удалить из кэша, чтобы следующий запуск перевёл их заново. (исправлено, удалено)"""
+    by_key = {_mt_key(p, t): t for t in texts for p in MT_PROVIDERS}
+    fixed = dropped = 0
+    keys = list(by_key)
+    async with SessionLocal() as s:
+        for i in range(0, len(keys), 500):
+            for c in (await s.scalars(select(CacheItem).where(
+                    CacheItem.key.in_(keys[i:i + 500])))).all():
+                src, value = by_key[c.key], (c.value or {}).get("text", "")
+                if uz_problem(src, value):
+                    await s.delete(c)
+                    dropped += 1
+                    continue
+                good = uzbek.typographic(fix_uz_numbering(value))
+                if good != value:
+                    c.value = {"text": good}
+                    fixed += 1
+            await s.commit()
+    return fixed, dropped
+
+
 def batches(texts: list[str], size: int, max_chars: int):
     cur, chars = [], 0
     for t in texts:
@@ -129,11 +156,17 @@ async def main() -> int:
     ap.add_argument("--rpm", type=float, default=10, help="запросов в минуту (бесплатный ключ — ~10–15)")
     ap.add_argument("--workers", type=int, default=3,
                     help="параллельных запросов (ответ идёт 10–20 с; общий темп — --rpm)")
-    ap.add_argument("--models", default=",".join(dict.fromkeys([
-                        st.gemini_model, "gemini-3.1-flash-lite", "gemini-3.5-flash-lite",
-                        "gemini-flash-lite-latest", "gemini-flash-latest"])),
+    # модель бота (GEMINI_MODEL) — последней: лимиты ключа у каждой модели свои, и
+    # заблаговременный перевод не должен съедать дневной лимит живого бота
+    rotation = [m for m in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite",
+                            "gemini-flash-latest", "gemini-flash-lite-latest")
+                if m != st.gemini_model] + [st.gemini_model]
+    ap.add_argument("--models", default=",".join(rotation),
                     help="модели по очереди: при перегрузке или лимите — следующая "
                          "(у бесплатного ключа лимиты у каждой модели свои)")
+    ap.add_argument("--recheck", action="store_true",
+                    help="проверить уже переведённое (uz_problem), привести апострофы к единому "
+                         "виду, негодное удалить из кэша — оно переведётся заново")
     a = ap.parse_args()
     if not st.gemini_api_key:
         print("GEMINI_API_KEY не задан (backend/.env). Ключ: https://aistudio.google.com/apikey")
@@ -151,6 +184,12 @@ async def main() -> int:
     if a.words:
         heads = heads[:a.words]
     texts = list(dict.fromkeys(t for h in heads for t in article_strings(articles[h])))
+    if a.recheck:
+        fixed, dropped = await recheck(texts)
+        print(f"Проверка кэша: апострофы исправлены у {fixed}, негодных удалено {dropped}",
+              flush=True)
+        async with SessionLocal() as s:
+            done_uz = await uz_cache(s)
     todo = [t for t in texts if not done_uz(t)]
     print(f"Слов: {len(heads)}, строк: {len(texts)}, уже переведено: {len(texts) - len(todo)}, "
           f"осталось: {len(todo)} ({sum(map(len, todo)) / 1e6:.1f} млн символов)", flush=True)

@@ -16,6 +16,7 @@ export function SourceBadge({ kind, verified = true }: { kind: Kind; verified?: 
     ai: "srcAi",
     bkrs: "srcBkrs",
     bkrs_mt: "srcBkrsMt",
+    bkrs_part: "srcBkrsPart",
     bkrs_ru: "srcBkrsRu",
   };
   const cls = kind === "curated" && verified ? "ok" : kind.startsWith("bkrs") ? "bkrs" : kind;
@@ -30,6 +31,7 @@ export function MiniSource({ kind }: { kind: Kind }) {
   if (kind === "wikt") return <sup className="mini" title={t("srcWikt")}>W</sup>;
   if (kind === "bkrs") return <sup className="mini bkrs" title={t("srcBkrs")}>БКРС</sup>;
   if (kind === "bkrs_mt") return <sup className="mini bkrs" title={t("srcBkrsMt")}>БКРС·MT</sup>;
+  if (kind === "bkrs_ru") return <sup className="mini bkrs" title={t("srcBkrsRu")}>БКРС·RU</sup>;
   return null;
 }
 
@@ -41,6 +43,7 @@ export function Legend({ kinds }: { kinds: Kind[] }) {
   if (kinds.includes("mt")) parts.push(`MT — ${t("srcMt")}`);
   if (kinds.includes("bkrs")) parts.push(`БКРС — ${t("srcBkrs")}`);
   if (kinds.includes("bkrs_mt")) parts.push(`БКРС·MT — ${t("srcBkrsMt")}`);
+  if (kinds.includes("bkrs_ru")) parts.push(`БКРС·RU — ${t("srcBkrsRu")}`);
   return parts.length ? <div className="legend">{parts.join(" · ")}</div> : null;
 }
 

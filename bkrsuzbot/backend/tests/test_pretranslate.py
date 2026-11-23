@@ -8,6 +8,7 @@ import pytest
 
 from app.scripts import pretranslate_bkrs as pt
 from app.services.translate import GeminiTranslator
+from conftest import uz_fake as lat
 from app.text.uzbek import typographic
 
 
@@ -43,13 +44,13 @@ def test_batches_respect_size_and_chars():
 
 async def test_wrong_count_is_split_until_it_works(session):
     # модель «теряет» строку в пакетах больше 2 — пакет делится пополам
-    http, calls = gemini(lambda t, m: (200, [f"uz {x}" for x in (t if len(t) <= 2 else t[:-1])]))
+    http, calls = gemini(lambda t, m: (200, [f"uz {lat(x)}" for x in (t if len(t) <= 2 else t[:-1])]))
     run = pt.Runner("k", ["m1"], 1000, http)
     texts = [f"строка пт {i}" for i in range(5)]
     assert await run.translate(texts) == 5
     assert run.skipped == 0 and len(calls) > 1
     out = await GeminiTranslator("k", "m1", http).translate(session, texts, "ru", "uz")
-    assert out == [f"uz строка пт {i}" for i in range(5)]  # всё уже в кэше
+    assert out == [f"uz {lat(f'строка пт {i}')}" for i in range(5)]  # всё уже в кэше
 
 
 async def test_rate_limit_stops_after_retries():
@@ -61,7 +62,7 @@ async def test_rate_limit_stops_after_retries():
 
 
 async def test_unknown_model_falls_back_and_bad_key_stops():
-    http, calls = gemini(lambda t, m: (404, "") if m == "gone" else (200, [f"uz {x}" for x in t]))
+    http, calls = gemini(lambda t, m: (404, "") if m == "gone" else (200, [f"uz {lat(x)}" for x in t]))
     run = pt.Runner("k", ["gone", "ok"], 1000, http)
     assert await run.translate(["строка модель"]) == 1
     assert [c[0] for c in calls] == ["gone", "ok"]
@@ -71,7 +72,7 @@ async def test_unknown_model_falls_back_and_bad_key_stops():
 
 
 async def test_overloaded_model_switches(session):
-    http, calls = gemini(lambda t, m: (503, "") if m == "busy" else (200, [f"uz {x}" for x in t]))
+    http, calls = gemini(lambda t, m: (503, "") if m == "busy" else (200, [f"uz {lat(x)}" for x in t]))
     run = pt.Runner("k", ["busy", "free"], 1000, http)
     assert await run.translate(["строка занято"]) == 1
     assert run.tr.model == "free"
@@ -90,7 +91,7 @@ async def test_uz_translations_are_stored_typographic(session):
 
 async def test_limit_on_one_model_switches_to_another():
     # у бесплатного ключа лимиты по моделям: 429 у «a» — сразу «b», без паузы
-    http, calls = gemini(lambda t, m: (429, "") if m == "a" else (200, [f"uz {x}" for x in t]))
+    http, calls = gemini(lambda t, m: (429, "") if m == "a" else (200, [f"uz {lat(x)}" for x in t]))
     run = pt.Runner("k", ["a", "b"], 1000, http)
     assert await run.translate(["строка лимит а"]) == 1
     assert [c[0] for c in calls] == ["a", "b"]
@@ -105,8 +106,30 @@ async def test_all_models_busy_then_recover():
 
     def handler(t, m):
         state["n"] += 1
-        return (503, "") if state["n"] <= 5 else (200, [f"uz {x}" for x in t])
+        return (503, "") if state["n"] <= 5 else (200, [f"uz {lat(x)}" for x in t])
     http, calls = gemini(handler)
     run = pt.Runner("k", ["a", "b"], 1000, http)
     assert await run.translate(["строка перегрузка"]) == 1
     assert len(calls) == 6 and run.busy_rounds == 0  # после успеха счётчики сброшены
+
+
+def test_uz_problem_rejects_broken_output():
+    from app.services.translate import fix_uz_numbering, uz_problem
+    assert uz_problem("2) ревность", "2) raшк") == "cyrillic"
+    assert uz_problem("寸, 亩, 钱", "cunt, mu, qyan") == "chinese characters changed"
+    assert uz_problem("2) бить", "urmoq") == "numbering lost"
+    assert uz_problem("о дхарме", "dharma haqida şey").startswith("foreign")
+    assert uz_problem("1937—1949 гг.", "1937–1949-yillar") is None
+    assert uz_problem("см. 臭牡丹", "qarang 臭牡丹") is None
+    assert fix_uz_numbering("а) делать; б) …") == "a) делать; b) …"
+
+
+async def test_rejected_line_is_retried_alone_and_not_cached(session):
+    # в пакете модель оставила кириллицу у второй строки; по одной — тоже плохо → не кэшируем
+    http, calls = gemini(lambda t, m: (200, [lat(x) if "хорош" in x else x for x in t]))
+    tr = GeminiTranslator("k", "m", http)
+    out = await tr.translate(session, ["хорошая строка", "плохая строка"], "ru", "uz", partial=True)
+    assert out == [lat("хорошая строка"), None]
+    assert len(calls) == 2  # пакет + повтор одной строки
+    again = await tr.translate(session, ["хорошая строка"], "ru", "uz", partial=True)
+    assert again == [lat("хорошая строка")] and len(calls) == 2  # из кэша

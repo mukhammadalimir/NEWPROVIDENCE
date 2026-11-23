@@ -32,6 +32,7 @@ from app.models import DictEntry  # noqa: E402
 from app.scripts.import_cedict import load_freq, measure_word, parse_u8  # noqa: E402
 from app.services.container import Services  # noqa: E402
 from app.text.pinyin import keys_from_numbered  # noqa: E402
+from app.text.uzbek import cyr_to_lat  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLE = Path(__file__).parent / "data" / "cedict_sample.u8"
@@ -81,6 +82,17 @@ def database():
     yield
 
 
+def uz_fake(q: str) -> str:
+    """Фейковый «узбекский»: транслитерация русского в латиницу (без кириллицы вовсе)."""
+    return cyr_to_lat(q).replace("ы", "i").replace("Ы", "I")
+
+
+def fake_tr(src: str, tgt: str, q: str) -> str:
+    """Фейковый перевод: «[цель] текст»; ru→uz — латиницей и без префикса (как настоящий
+    узбекский: нумерация «1)» должна остаться в начале — это проверяет uz_problem)."""
+    return uz_fake(q) if (src, tgt) == ("ru", "uz") else f"[{tgt}] {q}"
+
+
 class FakeGoogle:
     """Имитация ответов Google Translation и TTS по их формату (для тестов)."""
 
@@ -104,7 +116,7 @@ class FakeGoogle:
         body = json.loads(request.content)
         if request.url.host == "translation.googleapis.com":
             out = [{"translatedText": self.TRANSLATIONS.get(
-                (body["source"], body["target"], q), f"[{body['target']}] {q}")}
+                (body["source"], body["target"], q), fake_tr(body["source"], body["target"], q))}
                 for q in body["q"]]
             return httpx.Response(200, json={"data": {"translations": out}})
         if request.url.host == "generativelanguage.googleapis.com":
@@ -112,7 +124,9 @@ class FakeGoogle:
                 return httpx.Response(429, text="quota")
             prompt = body["contents"][0]["parts"][0]["text"]
             texts = json.loads(prompt.rsplit("Input:\n", 1)[1])
-            out = self.gemini_reply or json.dumps([f"[gemini] {t}" for t in texts], ensure_ascii=False)
+            ru_uz = "from Russian to Uzbek" in prompt
+            out = self.gemini_reply or json.dumps(
+                [uz_fake(t) if ru_uz else f"[gemini] {t}" for t in texts], ensure_ascii=False)
             return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": out}]}}]})
         if request.url.host == "texttospeech.googleapis.com":
             fake = f"AUDIO:{body['input']['text']}:{body['audioConfig']['speakingRate']}"
